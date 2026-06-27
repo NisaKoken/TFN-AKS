@@ -37,8 +37,8 @@ class CanManager {
 
    private:
     void handleMotorStatus(const twai_message_t& msg);
-    void handleBmsConfig(const twai_message_t& msg);
-    void handleBmsLive(const twai_message_t& msg);
+    void handleSolionBmsA(const twai_message_t& msg);
+    void handleSolionBmsB(const twai_message_t& msg);
     void updateMotorStatusValidity();
     void notifyFaultIfNeeded(uint8_t CAN_previousFlags, uint8_t CAN_currentFlags,
                              const char* CAN_faultSource);
@@ -54,6 +54,7 @@ class CanManager {
     TickType_t CAN_lastMotorStatusTick = 0;
     bool CAN_hasSeenMotorStatus = false;
     bool CAN_motorTimeoutLogged = false;
+    uint8_t CAN_prevBmsSystemState = 0;
     CAN_EventCallback CAN_eventCallback = nullptr;
     void* CAN_eventContext = nullptr;
 };

@@ -13,9 +13,10 @@
 // --- CAN Message IDs ---
 #define CAN_ID_TORQUE_CMD 0x100    // AKS → Motor Driver
 #define CAN_ID_MOTOR_STATUS 0x200  // Motor Driver → AKS
-#define CAN_ID_BMS_STATUS 0x300    // Legacy BMS → AKS
-#define CAN_ID_BMS_CONFIG 0xE000   // Lithium Balance BMS config frame
-#define CAN_ID_BMS_LIVE 0xE001     // Lithium Balance BMS live frame
+#define CAN_ID_BMS_STATUS 0x300    // Legacy (unused)
+// Solion SK Serisi BMS — 29-bit Extended ID, Big Endian, 125kbps
+#define CAN_ID_SOLION_BMS_A 0x111  // Cell voltages, temperatures, system state
+#define CAN_ID_SOLION_BMS_B 0x112  // Pack voltage, pack current, SOC
 
 // --- CAN (TJA1050 transceiver) ---
 #define CAN_TX_PIN GPIO_NUM_5
@@ -103,14 +104,19 @@
 // Critical levels should force a transition to FAULT.
 #define BMS_WARN_MAX_TEMP_C 55
 #define BMS_CRITICAL_MAX_TEMP_C 70
-#define BMS_WARN_MAX_CHARGE_CURRENT_DECI_A 9
-#define BMS_CRITICAL_MAX_CHARGE_CURRENT_DECI_A 10
-#define BMS_WARN_MAX_DISCHARGE_CURRENT_DECI_A 90
-#define BMS_CRITICAL_MAX_DISCHARGE_CURRENT_DECI_A 150
-#define BMS_WARN_MIN_PACK_VOLTAGE_DECI_V 74
-#define BMS_CRITICAL_MIN_PACK_VOLTAGE_DECI_V 70
-#define BMS_WARN_MAX_PACK_VOLTAGE_DECI_V 85
-#define BMS_CRITICAL_MAX_PACK_VOLTAGE_DECI_V 87
+// Current thresholds in centi-mA (0.01 mA units) — Solion SK Pack Current resolution.
+// 1 A = 100 000 centi-mA.
+#define BMS_WARN_MAX_CHARGE_CURRENT_CENTI_MA    90000    // 0.9 A
+#define BMS_CRITICAL_MAX_CHARGE_CURRENT_CENTI_MA 100000  // 1.0 A
+#define BMS_WARN_MAX_DISCHARGE_CURRENT_CENTI_MA  900000  // 9.0 A
+#define BMS_CRITICAL_MAX_DISCHARGE_CURRENT_CENTI_MA 1500000 // 15.0 A
+// Pack voltage thresholds in decivolts (1 deciV = 0.1 V).
+// The Solion SK BMS reports Pack Voltage with 0.1 V resolution;
+// raw = V * 10, so a 78 V nominal pack sits around raw 780.
+#define BMS_WARN_MIN_PACK_VOLTAGE_DECI_V 740
+#define BMS_CRITICAL_MIN_PACK_VOLTAGE_DECI_V 700
+#define BMS_WARN_MAX_PACK_VOLTAGE_DECI_V 850
+#define BMS_CRITICAL_MAX_PACK_VOLTAGE_DECI_V 870
 
 // Task watchdog timing is still using the ESP-IDF default configuration.
 // The shorter LoRa RX timeout below improves scheduling margin, but the global

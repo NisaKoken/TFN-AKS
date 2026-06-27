@@ -3,8 +3,8 @@
 // Saf CAN payload parser'ları — donanım, mutex ve global state bağımlılığı
 // yoktur. Bayt dizisini struct'a dönüştürürler. CanManager'ın handleXxx
 // metodları bu fonksiyonları çağırır; native testler aynı fonksiyonları
-// doğrudan çağırarak DLC kontrolü, big-endian dönüşüm, signed cast ve
-// sıcaklık ofseti gibi mantığı izole eder.
+// doğrudan çağırarak DLC kontrolü, big-endian dönüşüm ve signed cast
+// mantığını izole eder.
 //
 #include <cstdint>
 #include "Telemetry.h"
@@ -26,15 +26,17 @@ namespace CanParse {
 // halde 0. Başarıda `out.isValid = true` set edilir.
 bool parseMotorStatus(const twai_message_t& msg, MotorStatus& out);
 
-// BMS config frame (CAN ID 0xE000). DLC ≥ 6.
-// Yazılan alanlar: TEL_bmsPackVoltageDeciV, TEL_bmsAverageCellVoltageMv,
-// TEL_bmsDataValid (=true). Diğer TelemetryData alanlarına dokunulmaz.
-bool parseBmsConfig(const twai_message_t& msg, TelemetryData& out);
+// Solion SK BMS — CAN ID 0x111 (29-bit Extended), DLC = 8, Big Endian.
+// Yazılan alanlar: TEL_bmsCellVoltageMaxDeciMv, TEL_bmsCellVoltageMinDeciMv,
+// TEL_bmsTempHighestC, TEL_bmsTempLowestC, TEL_bmsSystemState,
+// TEL_bmsDataValid (=true). Başarısızlıkta (DLC < 7) false döner.
+bool parseSolionBmsA(const twai_message_t& msg, TelemetryData& out);
 
-// BMS live frame (CAN ID 0xE001). DLC ≥ 6.
-// Yazılan alanlar: TEL_bmsErrorFlags, TEL_bmsCurrentDeciA (int8_t cast),
-// TEL_bmsTemperatureC (data[3] - 100 ofset), TEL_bmsSoc, TEL_bmsDataValid.
-bool parseBmsLive(const twai_message_t& msg, TelemetryData& out);
+// Solion SK BMS — CAN ID 0x112 (29-bit Extended), DLC = 8, Big Endian.
+// Yazılan alanlar: TEL_bmsPackVoltageDeciV, TEL_bmsCurrentCentiMa,
+// TEL_bmsSocHundredths, TEL_bmsDataValid (=true).
+// Başarısızlıkta (DLC < 8) false döner.
+bool parseSolionBmsB(const twai_message_t& msg, TelemetryData& out);
 
 // Motor status timeout: en az bir paket görülmüş AND son veri valid AND
 // (now - lastTick) >= timeoutTicks. Diğer durumlarda false.

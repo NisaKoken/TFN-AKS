@@ -14,26 +14,34 @@ bool parseMotorStatus(const twai_message_t& msg, MotorStatus& out) {
     return true;
 }
 
-bool parseBmsConfig(const twai_message_t& msg, TelemetryData& out) {
-    if (msg.data_length_code < 6)
+bool parseSolionBmsA(const twai_message_t& msg, TelemetryData& out) {
+    if (msg.data_length_code < 7)
         return false;
 
-    out.TEL_bmsPackVoltageDeciV =
+    out.TEL_bmsCellVoltageMaxDeciMv =
+        static_cast<uint16_t>((msg.data[0] << 8) | msg.data[1]);
+    out.TEL_bmsCellVoltageMinDeciMv =
         static_cast<uint16_t>((msg.data[2] << 8) | msg.data[3]);
-    out.TEL_bmsAverageCellVoltageMv =
-        static_cast<uint16_t>((msg.data[4] << 8) | msg.data[5]);
-    out.TEL_bmsDataValid = true;
+    out.TEL_bmsTempHighestC = static_cast<int8_t>(msg.data[4]);
+    out.TEL_bmsTempLowestC  = static_cast<int8_t>(msg.data[5]);
+    out.TEL_bmsSystemState  = msg.data[6];
+    out.TEL_bmsDataValid    = true;
     return true;
 }
 
-bool parseBmsLive(const twai_message_t& msg, TelemetryData& out) {
-    if (msg.data_length_code < 6)
+bool parseSolionBmsB(const twai_message_t& msg, TelemetryData& out) {
+    if (msg.data_length_code < 8)
         return false;
 
-    out.TEL_bmsErrorFlags = msg.data[0];
-    out.TEL_bmsCurrentDeciA = static_cast<int8_t>(msg.data[1]);
-    out.TEL_bmsTemperatureC = static_cast<int16_t>(msg.data[3]) - 100;
-    out.TEL_bmsSoc = msg.data[5];
+    out.TEL_bmsPackVoltageDeciV =
+        static_cast<uint16_t>((msg.data[0] << 8) | msg.data[1]);
+    out.TEL_bmsCurrentCentiMa = static_cast<int32_t>(
+        (static_cast<uint32_t>(msg.data[2]) << 24) |
+        (static_cast<uint32_t>(msg.data[3]) << 16) |
+        (static_cast<uint32_t>(msg.data[4]) << 8)  |
+         static_cast<uint32_t>(msg.data[5]));
+    out.TEL_bmsSocHundredths =
+        static_cast<uint16_t>((msg.data[6] << 8) | msg.data[7]);
     out.TEL_bmsDataValid = true;
     return true;
 }

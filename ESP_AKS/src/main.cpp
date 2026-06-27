@@ -173,7 +173,8 @@ void vTask_HMI_Display(void *pvParameters) {
         TelemetryData TEL_data = {};
         if (xQueuePeek(TEL_sensorDataQueue, &TEL_data, 0) == pdTRUE) {
             HMI_screenData.HMI_currentSpeed = TEL_data.TEL_motorRpm;
-            HMI_screenData.HMI_currentBattery = TEL_data.TEL_bmsSoc;
+            HMI_screenData.HMI_currentBattery =
+                static_cast<uint8_t>(TEL_data.TEL_bmsSocHundredths / 100);
             HMI_screenData.HMI_motorRpm = TEL_data.TEL_motorRpm;
             HMI_screenData.HMI_motorTorqueFeedback =
                 TEL_data.TEL_motorTorqueFeedback;
@@ -182,7 +183,7 @@ void vTask_HMI_Display(void *pvParameters) {
             HMI_screenData.HMI_motorTimeoutActive =
                 TEL_data.TEL_motorTimeoutActive;
             HMI_screenData.HMI_bmsTemperatureC =
-                TEL_data.TEL_bmsTemperatureC;
+                TEL_data.TEL_bmsTempHighestC;
             HMI_screenData.HMI_bmsPackVoltageDeciV =
                 TEL_data.TEL_bmsPackVoltageDeciV;
         }

@@ -9,12 +9,18 @@ struct TelemetryData {
     bool TEL_motorDataValid;
     bool TEL_motorTimeoutActive;
 
-    uint8_t TEL_bmsSoc;
-    int16_t TEL_bmsCurrentDeciA;
-    int16_t TEL_bmsTemperatureC;
-    uint16_t TEL_bmsPackVoltageDeciV;
-    uint16_t TEL_bmsAverageCellVoltageMv;
-    uint8_t TEL_bmsErrorFlags;
+    // Solion SK BMS — CAN ID 0x111
+    uint16_t TEL_bmsCellVoltageMaxDeciMv;  // raw * 0.1 = mV
+    uint16_t TEL_bmsCellVoltageMinDeciMv;  // raw * 0.1 = mV
+    int8_t TEL_bmsTempHighestC;
+    int8_t TEL_bmsTempLowestC;
+    uint8_t TEL_bmsSystemState;  // 1=Discharge, 2=IDLE, 3=Charge, 4=FAULT
+
+    // Solion SK BMS — CAN ID 0x112
+    uint16_t TEL_bmsPackVoltageDeciV;  // raw * 0.1 = V
+    int32_t TEL_bmsCurrentCentiMa;     // raw * 0.01 = mA (+charge, -discharge)
+    uint16_t TEL_bmsSocHundredths;     // raw * 0.01 = %
+
     bool TEL_bmsDataValid;
 };
 

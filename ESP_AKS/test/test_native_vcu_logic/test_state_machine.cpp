@@ -134,7 +134,7 @@ void test_ready_to_fault_on_critical_telemetry(void) {
                           static_cast<int>(VcuLogic::getState()));
 
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsTemperatureC = 80;  // > 70°C critical
+    d.TEL_bmsTempHighestC = 80;  // > 70°C critical
     VcuLogic::setTelemetryData(d);
     VcuLogic::run();
 
@@ -150,7 +150,7 @@ void test_drive_to_fault_on_critical_current(void) {
     VcuLogic::run();
 
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsCurrentDeciA = -200;  // discharge critical
+    d.TEL_bmsCurrentCentiMa = -2000000;  // 20 A discharge — critical
     VcuLogic::setTelemetryData(d);
     VcuLogic::run();
 

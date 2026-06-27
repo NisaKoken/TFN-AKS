@@ -19,12 +19,14 @@ inline TelemetryData makeTelemetryDataValid() {
     d.TEL_motorDataValid = true;
     d.TEL_motorTimeoutActive = false;
 
-    d.TEL_bmsSoc = 80;
-    d.TEL_bmsCurrentDeciA = 0;
-    d.TEL_bmsTemperatureC = 25;
-    d.TEL_bmsPackVoltageDeciV = 80;          // 8.0 V — bandın ortası
-    d.TEL_bmsAverageCellVoltageMv = 4000;
-    d.TEL_bmsErrorFlags = 0;
+    d.TEL_bmsCellVoltageMaxDeciMv = 40000;   // 4000.0 mV
+    d.TEL_bmsCellVoltageMinDeciMv = 39500;   // 3950.0 mV
+    d.TEL_bmsTempHighestC = 25;
+    d.TEL_bmsTempLowestC  = 23;
+    d.TEL_bmsSystemState  = 2;               // IDLE — güvenli başlangıç
+    d.TEL_bmsPackVoltageDeciV = 800;         // 80.0 V — bandın ortası
+    d.TEL_bmsCurrentCentiMa = 0;
+    d.TEL_bmsSocHundredths = 8000;           // %80.00
     d.TEL_bmsDataValid = true;
     return d;
 }
