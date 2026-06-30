@@ -98,11 +98,15 @@
 
 #define RELAY_TOTAL_CHANNELS 10
 
-// --- UKS Emergency Stop Command (LoRa packet ID) ---
+// --- UKS LoRa Komut ve Heartbeat Byte Tanımları ---
 #define UKS_CMD_EMERGENCY_STOP 0xA1
-#define UKS_CMD_START 0xA2
-#define UKS_CMD_STOP 0xA3
-#define UKS_CMD_DRIVE_ENABLE 0xA4
+#define UKS_CMD_START          0xA2
+#define UKS_CMD_STOP           0xA3
+#define UKS_CMD_DRIVE_ENABLE   0xA4
+#define UKS_HEARTBEAT_BYTE     0xB0   // UKS ~1 Hz periyodik heartbeat (komut değil)
+
+// --- LoRa Link Monitörü ---
+#define LINK_TIMEOUT_MS        3000U  // 3 sn: 1 Hz heartbeat için 3x marj
 
 // --- Phase 1 Planning Notes ---
 // Torque command generation is intentionally held at zero until the pedal /

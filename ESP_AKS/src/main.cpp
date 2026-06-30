@@ -8,6 +8,7 @@
 
 #include "DisplayHMI.h"
 #include "CanManager.h"
+#include "LinkMonitor.h"
 #include "RelayManager.h"
 #include "SystemConfig.h"
 #include "Telemetry.h"
@@ -25,6 +26,14 @@ static constexpr const char *TAG = "APP_MAIN";
 static constexpr uint32_t STACK_LOG_INTERVAL_MS = 30000;
 
 QueueHandle_t TEL_sensorDataQueue = nullptr;
+
+// --- LoRa link monitörü (vTask_LoRa_UKS yazar, diğer task'lar okur) ---
+static volatile bool   s_linkDown        = false;
+static volatile uint64_t s_lastHeartbeatMs = 0u;  // ms; 0 = henüz heartbeat gelmedi
+
+extern "C" bool LoRa_IsLinkDown(void) {
+    return s_linkDown;
+}
 
 static HMI_VcuState HMI_mapVcuState(VcuLogic::VcuState HMI_state) {
   switch (HMI_state) {
@@ -439,8 +448,25 @@ void vTask_LoRa_UKS(void *pvParameters) {
         ESP_LOGI(TAG, "LoRa command: DRIVE ENABLE request");
         VcuLogic::postEvent(VcuLogic::VcuEvent::DRIVE_ENABLE);
         break;
+      case UKS_HEARTBEAT_BYTE:
+        s_lastHeartbeatMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+        break;
       default:
         break;
+      }
+    }
+
+    // Link durumu kontrolü — her 10 ms döngüde çalışır
+    {
+      const uint64_t LO_nowMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+      const bool LO_timeout =
+          link_check_timeout(LO_nowMs, s_lastHeartbeatMs, LINK_TIMEOUT_MS);
+      if (LO_timeout && !s_linkDown) {
+        s_linkDown = true;
+        ESP_LOGW("LINK", "UKS heartbeat timeout — link DOWN");
+      } else if (!LO_timeout && s_linkDown && s_lastHeartbeatMs != 0u) {
+        s_linkDown = false;
+        ESP_LOGI("LINK", "Heartbeat alindi — link UP");
       }
     }
 
