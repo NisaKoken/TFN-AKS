@@ -49,7 +49,7 @@
 #define LORA_MODE_NORMAL_M0_LEVEL 0
 #define LORA_MODE_NORMAL_M1_LEVEL 0
 #define LORA_AUX_READY_LEVEL 1
-#define LORA_PROTOCOL_VERSION 1
+#define LORA_PROTOCOL_VERSION 2
 
 // --- E32 Register Values (UKS lora.h ile birebir eşleştirilmeli) ---
 // E32-433T30D SPED byte bit alanları (datasheet Tablo 4):
@@ -64,7 +64,9 @@
 #define LORA_CFG_ADDL   0x00U
 #define LORA_CFG_SPED   0xC4U
 #define LORA_CFG_CHAN   0x17U  // kanal 23 -> 433 MHz
-#define LORA_CFG_OPTION 0x47U  // transparent | push-pull | 250ms wake | FEC on | 21dBm (bit[1:0]=11)
+#define LORA_CFG_OPTION 0x44U  // transparent | push-pull | 250ms wake | FEC on | max-güç kodu (bit[1:0]=00)
+// OPTION bit[1:0] güç: 00=en yüksek, 01=orta-yüksek, 10=orta-düşük, 11=en düşük (~10 dBm).
+// T30D harici PA bu register değerini farklı yorumlar; sahada menzil testiyle doğrula.
 
 // --- E32 Config Modu Zaman Aşımları ---
 #define LORA_AUX_MODE_TIMEOUT_MS  500   // M0/M1=1 sonrası AUX HIGH bekleme (ms)

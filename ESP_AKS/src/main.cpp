@@ -1,6 +1,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -127,7 +128,9 @@ void vTask_CAN_Comm(void *pvParameters) {
 
     // 3. Push the latest telemetry snapshot to the shared queue
     if (TEL_sensorDataQueue != nullptr) {
-      const TelemetryData TEL_data = can.getTelemetryData();
+      TelemetryData TEL_data = can.getTelemetryData();
+      TEL_data.TEL_speedKmhX10  = rpmToSpeedKmhX10(TEL_data.TEL_motorRpm);
+      TEL_data.TEL_timestampMs  = (uint32_t)(esp_timer_get_time() / 1000ULL);
       xQueueOverwrite(TEL_sensorDataQueue, &TEL_data);
     }
 
