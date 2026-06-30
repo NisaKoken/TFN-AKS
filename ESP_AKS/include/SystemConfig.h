@@ -40,10 +40,10 @@
 #define LORA_UART_NUM UART_NUM_2
 #define LORA_TX_PIN GPIO_NUM_16   // ESP TX -> Şemadaki LR_RXD (IO16)
 #define LORA_RX_PIN GPIO_NUM_17   // ESP RX <- Şemadaki LR_TXD (IO17)
-#define LORA_AUX_PIN GPIO_NUM_35  // Şemada AUX IO35'e bağlı (Giriş)
+#define LORA_AUX_PIN GPIO_NUM_35  // IO35 sadece giriş; dahili pull-up YOK — harici 10k pull-up gerekli
 #define LORA_M0_PIN GPIO_NUM_25   // Şemadaki MO (IO25)
 #define LORA_M1_PIN GPIO_NUM_26   // Şemadaki M1 (IO26)
-#define LORA_UART_BAUD 9600       // E32 default baud
+#define LORA_UART_BAUD 9600       // MCU↔E32 yerel seri hız (config modunda da aynı)
 #define LORA_TX_PERIOD_MS 200     // 5 Hz telemetry uplink
 #define LORA_RX_TIMEOUT_MS 20
 #define LORA_MODE_NORMAL_M0_LEVEL 0
@@ -51,15 +51,20 @@
 #define LORA_AUX_READY_LEVEL 1
 #define LORA_PROTOCOL_VERSION 1
 
-// --- E32 Register Values (UKS lora.h ile eşleştirilmiş) ---
-// SPED: bits[7:6]=00(8N1) | bits[5:3]=011(9600 baud) | bits[2:0]=010(2.4kbps air)
-// Not: UART baud (bits[5:3]) MCU↔E32 yerel hızdır; air rate (bits[2:0]) RF hava hızıdır.
-// Her iki taraf da 9600 UART kullandığından 0x1A her iki uç için tutarlıdır.
+// --- E32 Register Values (UKS lora.h ile birebir eşleştirilmeli) ---
+// E32-433T30D SPED byte bit alanları (datasheet Tablo 4):
+//   bit[7:6] = UART baud : 00=1200 01=2400 10=4800 11=9600
+//   bit[5:3] = parity    : 000=8N1 001=8O1 010=8E1
+//   bit[2:0] = air rate  : 000=0.3k 001=1.2k 010=2.4k 011=4.8k 100=9.6k 101=19.2k
+//
+// SPED=0xC4 = 1100 0100 → bit[7:6]=11(9600 baud) | bit[5:3]=000(8N1) | bit[2:0]=100(9.6 kbps air)
+// 9.6 kbps air: ~78 byte v2 telemetri paketi ~65 ms havada kalır → 200 ms / 5 Hz periyoduna sığar.
+// ÖNEMLİ: UKS lora.h'de de SPED=0xC4 olmalı (eski 0xC2=2.4kbps air / 0x1A=1200 baud YANLIŞTIR).
 #define LORA_CFG_ADDH   0x00U
 #define LORA_CFG_ADDL   0x00U
-#define LORA_CFG_SPED   0x1AU
+#define LORA_CFG_SPED   0xC4U
 #define LORA_CFG_CHAN   0x17U  // kanal 23 -> 433 MHz
-#define LORA_CFG_OPTION 0x47U  // transparent | push-pull | 250ms wake | FEC on | 30dBm
+#define LORA_CFG_OPTION 0x47U  // transparent | push-pull | 250ms wake | FEC on | 21dBm (bit[1:0]=11)
 
 // --- E32 Config Modu Zaman Aşımları ---
 #define LORA_AUX_MODE_TIMEOUT_MS  500   // M0/M1=1 sonrası AUX HIGH bekleme (ms)

@@ -393,9 +393,17 @@ void vTask_LoRa_UKS(void *pvParameters) {
     }
   }
 
-  // Normal transparan moda dön
+  // Normal transparan moda dön; AUX HIGH gelene kadar TX/RX başlatma
   gpio_set_level(LORA_M0_PIN, LORA_MODE_NORMAL_M0_LEVEL);
   gpio_set_level(LORA_M1_PIN, LORA_MODE_NORMAL_M1_LEVEL);
+  {
+    const TickType_t LO_normT0 = xTaskGetTickCount();
+    while ((xTaskGetTickCount() - LO_normT0) <
+           pdMS_TO_TICKS(LORA_AUX_MODE_TIMEOUT_MS)) {
+      if (gpio_get_level(LORA_AUX_PIN) == LORA_AUX_READY_LEVEL) break;
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
+  }
   LO_auxLevel = gpio_get_level(LORA_AUX_PIN);
   ESP_LOGI(TAG, "E32: normal mod (M0=%d M1=%d AUX=%d)",
            LORA_MODE_NORMAL_M0_LEVEL, LORA_MODE_NORMAL_M1_LEVEL, LO_auxLevel);

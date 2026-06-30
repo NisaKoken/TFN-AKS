@@ -24,31 +24,31 @@ static constexpr int DIAG_RX_WAIT_MS  = 500;
 
 // ---------------------------------------------------------------------------
 // SPED byte ayrıştırma yardımcıları (E32-433T30D datasheet — Tablo 4)
+// Doğru bit alanı düzeni:
+//   bit[7:6] = UART baud (2-bit, 4 hız: 1200/2400/4800/9600)
+//   bit[5:3] = parity / veri formatı
+//   bit[2:0] = air data rate
 // ---------------------------------------------------------------------------
 
-static const char* DIAG_parityStr(uint8_t p) {
-    // bits[7:6]
-    switch (p) {
-        case 0: return "8N1";
-        case 1: return "8O1";
-        case 2: return "8E1";
-        case 3: return "8N1";
-        default: return "?";
-    }
-}
-
 static const char* DIAG_uartBaudStr(uint8_t b) {
-    // bits[5:3]
+    // bits[7:6] — E32-433T30D UART baud (2-bit alan)
     switch (b) {
         case 0: return "1200";
         case 1: return "2400";
         case 2: return "4800";
         case 3: return "9600";
-        case 4: return "19200";
-        case 5: return "38400";
-        case 6: return "57600";
-        case 7: return "115200";
         default: return "?";
+    }
+}
+
+static const char* DIAG_parityStr(uint8_t p) {
+    // bits[5:3] — parity / veri formatı
+    switch (p & 0x03u) {
+        case 0: return "8N1";
+        case 1: return "8O1";
+        case 2: return "8E1";
+        case 3: return "8N1";
+        default: return "8N1";
     }
 }
 
@@ -65,11 +65,11 @@ static const char* DIAG_airRateStr(uint8_t r) {
 }
 
 static void DIAG_decodeSped(uint8_t sped) {
-    const uint8_t parity = (sped >> 6) & 0x03u;
-    const uint8_t baud   = (sped >> 3) & 0x07u;
-    const uint8_t air    = sped & 0x07u;
-    ESP_LOGI(TAG, "  SPED  = 0x%02X  ->  parity: %s | UART: %s bps | air rate: %s",
-             sped, DIAG_parityStr(parity), DIAG_uartBaudStr(baud), DIAG_airRateStr(air));
+    const uint8_t baud   = (sped >> 6) & 0x03u;  // bit[7:6] = UART baud
+    const uint8_t parity = (sped >> 3) & 0x07u;  // bit[5:3] = parity
+    const uint8_t air    = sped & 0x07u;           // bit[2:0] = air data rate
+    ESP_LOGI(TAG, "  SPED  = 0x%02X  ->  UART: %s bps | parity: %s | air rate: %s",
+             sped, DIAG_uartBaudStr(baud), DIAG_parityStr(parity), DIAG_airRateStr(air));
 }
 
 // ---------------------------------------------------------------------------
