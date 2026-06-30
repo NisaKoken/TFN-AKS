@@ -9,6 +9,7 @@
 #include "DisplayHMI.h"
 #include "CanManager.h"
 #include "LinkMonitor.h"
+#include "OfflineBuffer.h"
 #include "RelayManager.h"
 #include "SystemConfig.h"
 #include "Telemetry.h"
@@ -466,25 +467,43 @@ void vTask_LoRa_UKS(void *pvParameters) {
         ESP_LOGW("LINK", "UKS heartbeat timeout — link DOWN");
       } else if (!LO_timeout && s_linkDown && s_lastHeartbeatMs != 0u) {
         s_linkDown = false;
-        ESP_LOGI("LINK", "Heartbeat alindi — link UP");
+        ESP_LOGI("LINK", "Heartbeat alindi — link UP: %d paket replay edilecek",
+                 ob_count());
       }
     }
 
     const TickType_t LO_nowTick = xTaskGetTickCount();
     if ((LO_nowTick - LO_lastTelemetryTick) >=
         pdMS_TO_TICKS(LORA_TX_PERIOD_MS)) {
+      LO_lastTelemetryTick = LO_nowTick;
+
       if (TEL_sensorDataQueue != nullptr) {
-        TelemetryData TEL_data = {};
-        if (xQueuePeek(TEL_sensorDataQueue, &TEL_data, 0) == pdTRUE) {
-          if (gpio_get_level(LORA_AUX_PIN) == LORA_AUX_READY_LEVEL) {
-            LO_telemetry.sendStatus(TEL_data);
-            LO_lastTelemetryTick = LO_nowTick;
-            LO_auxNotReadyLogged = false;
-          } else {
-            if (!LO_auxNotReadyLogged) {
-              ESP_LOGW(TAG, "LoRa AUX not ready, telemetry TX skipped");
-              LO_auxNotReadyLogged = true;
+        if (!LoRa_IsLinkDown()) {
+          // --- NORMAL MOD: önce buffer replay, sonra canlı paket ---
+          TelemetryData LO_replay = {};
+          while (ob_pop(LO_replay)) {
+            LO_telemetry.sendStatus(LO_replay);
+            esp_task_wdt_reset();
+            vTaskDelay(pdMS_TO_TICKS(50));
+          }
+          TelemetryData LO_live = {};
+          if (xQueuePeek(TEL_sensorDataQueue, &LO_live, 0) == pdTRUE) {
+            if (gpio_get_level(LORA_AUX_PIN) == LORA_AUX_READY_LEVEL) {
+              LO_telemetry.sendStatus(LO_live);
+              LO_auxNotReadyLogged = false;
+            } else {
+              if (!LO_auxNotReadyLogged) {
+                ESP_LOGW(TAG, "LoRa AUX not ready, telemetry TX skipped");
+                LO_auxNotReadyLogged = true;
+              }
             }
+          }
+        } else {
+          // --- OFFLINE MOD: canlı TX yok, buffer'a yaz ---
+          // TEL_timestampMs paket üretildiğinde (CAN task) zaten set edildi.
+          TelemetryData LO_buffered = {};
+          if (xQueuePeek(TEL_sensorDataQueue, &LO_buffered, 0) == pdTRUE) {
+            ob_push(LO_buffered);
           }
         }
       }
