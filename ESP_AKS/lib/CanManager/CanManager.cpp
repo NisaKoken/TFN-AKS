@@ -87,12 +87,12 @@ void CanManager::processRxMessages() {
                 handleMotorStatus(msg);
                 break;
 
-            case CAN_ID_BMS_CONFIG:
-                handleBmsConfig(msg);
+            case CAN_ID_SOLION_BMS_A:
+                handleSolionBmsA(msg);
                 break;
 
-            case CAN_ID_BMS_LIVE:
-                handleBmsLive(msg);
+            case CAN_ID_SOLION_BMS_B:
+                handleSolionBmsB(msg);
                 break;
 
             case CAN_ID_BMS_STATUS:
@@ -168,64 +168,70 @@ void CanManager::handleMotorStatus(const twai_message_t& msg) {
              s_motorStatus.torqueFeedback);
 }
 
-void CanManager::handleBmsConfig(const twai_message_t& msg) {
+void CanManager::handleSolionBmsA(const twai_message_t& msg) {
     if (s_mutex == nullptr) {
-        ESP_LOGW(TAG, "BMS config received before mutex initialization");
+        ESP_LOGW(TAG, "Solion BMS-A received before mutex initialization");
         return;
     }
 
     TelemetryData parsed{};
-    if (!CanParse::parseBmsConfig(msg, parsed)) {
-        ESP_LOGW(TAG, "BMS config DLC too short: %d", msg.data_length_code);
+    if (!CanParse::parseSolionBmsA(msg, parsed)) {
+        ESP_LOGW(TAG, "Solion BMS-A DLC too short: %d", msg.data_length_code);
+        return;
+    }
+
+    uint8_t CAN_prevState = 0;
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+
+    CAN_prevState = CAN_prevBmsSystemState;
+
+    s_telemetryData.TEL_bmsCellVoltageMaxDeciMv = parsed.TEL_bmsCellVoltageMaxDeciMv;
+    s_telemetryData.TEL_bmsCellVoltageMinDeciMv = parsed.TEL_bmsCellVoltageMinDeciMv;
+    s_telemetryData.TEL_bmsTempHighestC = parsed.TEL_bmsTempHighestC;
+    s_telemetryData.TEL_bmsTempLowestC  = parsed.TEL_bmsTempLowestC;
+    s_telemetryData.TEL_bmsSystemState  = parsed.TEL_bmsSystemState;
+    s_telemetryData.TEL_bmsDataValid    = true;
+    CAN_prevBmsSystemState = parsed.TEL_bmsSystemState;
+
+    xSemaphoreGive(s_mutex);
+
+    if (parsed.TEL_bmsSystemState == 4 && CAN_prevState != 4) {
+        ESP_LOGW(TAG, "BMS entered FAULT state");
+        if (CAN_eventCallback != nullptr)
+            CAN_eventCallback(CAN_Event::FAULT_DETECTED, CAN_eventContext);
+    }
+
+    ESP_LOGD(TAG, "BMS-A: cellMax=%u cellMin=%u deciMv, tempH=%d tempL=%d C, state=%u",
+             parsed.TEL_bmsCellVoltageMaxDeciMv, parsed.TEL_bmsCellVoltageMinDeciMv,
+             parsed.TEL_bmsTempHighestC, parsed.TEL_bmsTempLowestC,
+             parsed.TEL_bmsSystemState);
+}
+
+void CanManager::handleSolionBmsB(const twai_message_t& msg) {
+    if (s_mutex == nullptr) {
+        ESP_LOGW(TAG, "Solion BMS-B received before mutex initialization");
+        return;
+    }
+
+    TelemetryData parsed{};
+    if (!CanParse::parseSolionBmsB(msg, parsed)) {
+        ESP_LOGW(TAG, "Solion BMS-B DLC too short: %d", msg.data_length_code);
         return;
     }
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
     s_telemetryData.TEL_bmsPackVoltageDeciV = parsed.TEL_bmsPackVoltageDeciV;
-    s_telemetryData.TEL_bmsAverageCellVoltageMv =
-        parsed.TEL_bmsAverageCellVoltageMv;
-    s_telemetryData.TEL_bmsDataValid = true;
+    s_telemetryData.TEL_bmsCurrentCentiMa   = parsed.TEL_bmsCurrentCentiMa;
+    s_telemetryData.TEL_bmsSocHundredths    = parsed.TEL_bmsSocHundredths;
+    s_telemetryData.TEL_bmsDataValid        = true;
 
     xSemaphoreGive(s_mutex);
 
-    ESP_LOGD(TAG, "BMS config: pack=%u deciV, cell=%u mV",
-             parsed.TEL_bmsPackVoltageDeciV,
-             parsed.TEL_bmsAverageCellVoltageMv);
-}
-
-void CanManager::handleBmsLive(const twai_message_t& msg) {
-    if (s_mutex == nullptr) {
-        ESP_LOGW(TAG, "BMS live received before mutex initialization");
-        return;
-    }
-
-    TelemetryData parsed{};
-    if (!CanParse::parseBmsLive(msg, parsed)) {
-        ESP_LOGW(TAG, "BMS live DLC too short: %d", msg.data_length_code);
-        return;
-    }
-
-    uint8_t CAN_previousBmsErrorFlags = 0;
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-
-    CAN_previousBmsErrorFlags = s_telemetryData.TEL_bmsErrorFlags;
-
-    s_telemetryData.TEL_bmsErrorFlags = parsed.TEL_bmsErrorFlags;
-    s_telemetryData.TEL_bmsCurrentDeciA = parsed.TEL_bmsCurrentDeciA;
-    s_telemetryData.TEL_bmsTemperatureC = parsed.TEL_bmsTemperatureC;
-    s_telemetryData.TEL_bmsSoc = parsed.TEL_bmsSoc;
-    s_telemetryData.TEL_bmsDataValid = true;
-
-    xSemaphoreGive(s_mutex);
-
-    notifyFaultIfNeeded(CAN_previousBmsErrorFlags, parsed.TEL_bmsErrorFlags,
-                        "BMS");
-
-    ESP_LOGD(TAG, "BMS live: current=%d deciA, temp=%d C, soc=%u%%",
-             parsed.TEL_bmsCurrentDeciA, parsed.TEL_bmsTemperatureC,
-             parsed.TEL_bmsSoc);
+    ESP_LOGD(TAG, "BMS-B: pack=%u deciV, current=%ld centi-mA, soc=%u (x0.01%%)",
+             parsed.TEL_bmsPackVoltageDeciV, parsed.TEL_bmsCurrentCentiMa,
+             parsed.TEL_bmsSocHundredths);
 }
 
 void CanManager::updateMotorStatusValidity() {

@@ -19,20 +19,27 @@ void Telemetry::sendStatus(const TelemetryData& TEL_data) {
     if (!TEL_isInitialized)
         return;
 
+    // Format: TEL,ver,seq,rpm,torque,motorErr,motorValid,motorTimeout,
+    //         cellVMax,cellVMin,tempH,tempL,sysState,packV,current,soc,bmsValid
     char TEL_payload[160];
     const int TEL_payloadLength = snprintf(
         TEL_payload, sizeof(TEL_payload),
-        "TEL,%d,%lu,%u,%d,%u,%u,%u,%u,%d,%d,%u,%u,%u,%u\r\n",
+        "TEL,%d,%lu,%u,%d,%u,%u,%u,%u,%u,%d,%d,%u,%u,%ld,%u,%u\r\n",
         LORA_PROTOCOL_VERSION,
         static_cast<unsigned long>(TEL_sequenceCounter),
-        TEL_data.TEL_motorRpm, TEL_data.TEL_motorTorqueFeedback,
+        TEL_data.TEL_motorRpm,
+        static_cast<int>(TEL_data.TEL_motorTorqueFeedback),
         TEL_data.TEL_motorErrorFlags,
         TEL_data.TEL_motorDataValid ? 1u : 0u,
         TEL_data.TEL_motorTimeoutActive ? 1u : 0u,
-        TEL_data.TEL_bmsSoc,
-        TEL_data.TEL_bmsCurrentDeciA, TEL_data.TEL_bmsTemperatureC,
+        TEL_data.TEL_bmsCellVoltageMaxDeciMv,
+        TEL_data.TEL_bmsCellVoltageMinDeciMv,
+        static_cast<int>(TEL_data.TEL_bmsTempHighestC),
+        static_cast<int>(TEL_data.TEL_bmsTempLowestC),
+        TEL_data.TEL_bmsSystemState,
         TEL_data.TEL_bmsPackVoltageDeciV,
-        TEL_data.TEL_bmsAverageCellVoltageMv, TEL_data.TEL_bmsErrorFlags,
+        static_cast<long>(TEL_data.TEL_bmsCurrentCentiMa),
+        TEL_data.TEL_bmsSocHundredths,
         TEL_data.TEL_bmsDataValid ? 1u : 0u);
 
     if (TEL_payloadLength <= 0)

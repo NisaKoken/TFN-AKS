@@ -33,7 +33,7 @@ void test_telemetry_begin_and_send(void) {
     d.TEL_motorRpm = 1234;
     d.TEL_motorTorqueFeedback = -50;
     d.TEL_motorDataValid = true;
-    d.TEL_bmsSoc = 80;
+    d.TEL_bmsSocHundredths = 8000;  // 80.00%
     d.TEL_bmsDataValid = true;
     tel.sendStatus(d);
 

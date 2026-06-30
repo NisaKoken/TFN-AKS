@@ -19,12 +19,14 @@ TelemetryData makeDistinctData() {
     d.TEL_motorErrorFlags = 5;
     d.TEL_motorDataValid = true;
     d.TEL_motorTimeoutActive = false;
-    d.TEL_bmsSoc = 87;
-    d.TEL_bmsCurrentDeciA = -90;
-    d.TEL_bmsTemperatureC = 42;
-    d.TEL_bmsPackVoltageDeciV = 78;
-    d.TEL_bmsAverageCellVoltageMv = 3950;
-    d.TEL_bmsErrorFlags = 0;
+    d.TEL_bmsCellVoltageMaxDeciMv = 37734;  // 3773.4 mV
+    d.TEL_bmsCellVoltageMinDeciMv = 37422;  // 3742.2 mV
+    d.TEL_bmsTempHighestC = 32;
+    d.TEL_bmsTempLowestC  = 31;
+    d.TEL_bmsSystemState  = 2;              // IDLE
+    d.TEL_bmsPackVoltageDeciV = 780;        // 78.0 V
+    d.TEL_bmsCurrentCentiMa = -181610;      // -1816.10 mA
+    d.TEL_bmsSocHundredths = 6283;          // 62.83%
     d.TEL_bmsDataValid = true;
     return d;
 }
@@ -126,7 +128,7 @@ void test_negative_current_is_formatted(void) {
     Telemetry tel;
     tel.begin();
     TelemetryData d = makeZeroData();
-    d.TEL_bmsCurrentDeciA = -128;
+    d.TEL_bmsCurrentCentiMa = -128;
     tel.sendStatus(d);
 
     TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",-128,"));
@@ -137,7 +139,7 @@ void test_negative_temperature_is_formatted(void) {
     Telemetry tel;
     tel.begin();
     TelemetryData d = makeZeroData();
-    d.TEL_bmsTemperatureC = -20;
+    d.TEL_bmsTempHighestC = -20;
     tel.sendStatus(d);
 
     TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",-20,"));
@@ -200,7 +202,7 @@ void test_full_format_with_distinct_values(void) {
 
     const char* buf = fake_uart_get_buffer();
     const char* expected =
-        "TEL,1,0,1500,-250,5,1,0,87,-90,42,78,3950,0,1\r\n";
+        "TEL,1,0,1500,-250,5,1,0,37734,37422,32,31,2,780,-181610,6283,1\r\n";
     TEST_ASSERT_EQUAL_STRING(expected, buf);
 }
 

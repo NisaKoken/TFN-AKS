@@ -26,31 +26,31 @@ void test_reset_interlock_motor_error_blocks(void) {
 
 void test_reset_interlock_bms_error_blocks(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsErrorFlags = 0x10;
+    d.TEL_bmsSystemState = 4;  // FAULT
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
 void test_reset_interlock_critical_temperature_blocks(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsTemperatureC = 75;  // > 70°C critical
+    d.TEL_bmsTempHighestC = 75;  // > 70°C critical
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
 void test_reset_interlock_critical_voltage_low_blocks(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsPackVoltageDeciV = 65;  // < 70 dV critical
+    d.TEL_bmsPackVoltageDeciV = 650;  // < 700 dV critical
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
 void test_reset_interlock_critical_voltage_high_blocks(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsPackVoltageDeciV = 90;  // > 87 dV critical
+    d.TEL_bmsPackVoltageDeciV = 900;  // > 870 dV critical
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
 void test_reset_interlock_critical_current_blocks(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsCurrentDeciA = -200;  // discharge critical
+    d.TEL_bmsCurrentCentiMa = -2000000;  // 20 A discharge — critical
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
@@ -65,6 +65,6 @@ void test_reset_interlock_motor_timeout_in_fault_blocks(void) {
 // Sadece warning seviyesindeki bir koşul reset'i bloklamamalı.
 void test_reset_interlock_warning_level_passes(void) {
     TelemetryData d = makeTelemetryDataValid();
-    d.TEL_bmsTemperatureC = 60;  // warning ama critical değil
+    d.TEL_bmsTempHighestC = 60;  // warning ama critical değil
     TEST_ASSERT_TRUE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
