@@ -215,7 +215,8 @@ void vTask_HMI_Display(void *pvParameters) {
             if (TEL_data.TEL_bmsDataValid) {
                 BmsPackData BMS_raw = {};
                 BMS_raw.isValid = true;
-                BMS_raw.packCurrentMa = TEL_data.TEL_bmsCurrentCentiMa * 10;
+                // TEL_bmsCurrentCentiMa: raw * 0.01 = mA -> mA için /100.
+                BMS_raw.packCurrentMa = TEL_data.TEL_bmsCurrentCentiMa / 100;
                 
                 // Gerçek Solion BMS 24 hücre verisini ayrı ayrı göndermez, sadece max/min gönderir.
                 // Ekranda (Nextion) 24 hücre barının tümünün hata vermemesi ve sahte (rastgele) veri 
