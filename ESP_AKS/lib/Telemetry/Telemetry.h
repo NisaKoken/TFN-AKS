@@ -2,9 +2,9 @@
 
 #include <cstdint>
 
-// --- Hız dönüşüm sabitleri (araç geometrisi netleştikten sonra güncelle) ---
-#define WHEEL_DIAMETER_M 0.5f   // TODO: gerçek tekerlek çapı (m)
-#define GEAR_RATIO       1.0f   // TODO: gerçek dişli oranı
+// --- Speed conversion constants (update once vehicle geometry is confirmed) ---
+#define WHEEL_DIAMETER_M 0.5f   // TODO: actual wheel diameter (m)
+#define GEAR_RATIO       1.0f   // TODO: actual gear ratio
 
 #define TEL_SPD_X10_MAX 3000  // UKS telemetry.c sanity siniri ile senkron
                               // — degistirilecekse iki tarafta birlikte
@@ -47,17 +47,19 @@ struct TelemetryData {
 
     bool TEL_bmsDataValid;
 
-    uint32_t TEL_timestampMs   = 0;   // boot'tan beri ms — paket oluşturulduğu anda damgalanır
-    uint16_t TEL_speedKmhX10  = 0;   // araç hızı ×10 km/h, rpmToSpeedKmhX10() ile doldurulur
+    uint32_t TEL_timestampMs   = 0;   // ms since boot — stamped when packet is created
+    uint16_t TEL_speedKmhX10  = 0;   // vehicle speed ×10 km/h, filled via rpmToSpeedKmhX10()
 };
 
 class Telemetry {
    public:
     Telemetry();
     bool begin();
+
+    // Formats TelemetryData into TEKNOFEST-compliant packet and writes to UART.
+    // Format: zaman_ms;hiz_kmh;T_bat_C;V_bat_C;kalan_enerji_Wh\r\n
     void sendStatus(const TelemetryData& TEL_data);
 
    private:
     bool TEL_isInitialized;
-    uint32_t TEL_sequenceCounter;
 };
