@@ -439,16 +439,8 @@ void vTask_LoRa_UKS(void *pvParameters) {
       case UKS_CMD_EMERGENCY_STOP:
         VcuLogic::postEvent(VcuLogic::VcuEvent::EMERGENCY_STOP);
         break;
-      case UKS_CMD_START:
-        VcuLogic::postEvent(VcuLogic::VcuEvent::START_REQUEST);
-        break;
-      case UKS_CMD_STOP:
-        VcuLogic::postEvent(VcuLogic::VcuEvent::RESET);
-        break;
-      case UKS_CMD_DRIVE_ENABLE:
-        ESP_LOGI(TAG, "LoRa command: DRIVE ENABLE request");
-        VcuLogic::postEvent(VcuLogic::VcuEvent::DRIVE_ENABLE);
-        break;
+      // TEKNOFEST rule: only E-Stop command is allowed from UKS to vehicle,
+      // all other remote commands have been removed.
       case UKS_HEARTBEAT_BYTE:
         s_lastHeartbeatMs = (uint64_t)(esp_timer_get_time() / 1000LL);
         break;
