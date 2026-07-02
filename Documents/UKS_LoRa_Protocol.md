@@ -4,10 +4,12 @@ This document defines the current command and telemetry contract between the UKS
 
 ## Link Assumptions
 
-- Radio module: E32-433T30D
+- Radio module: E22-400T30D-V2 (SX1268) — pin-compatible successor to the retired E32-433T30D
 - UART mode: transparent mode
 - Selected startup mode: `M0 = 0`, `M1 = 0`
 - UART baud: `9600`
+- Air data rate: `9.6 kbps` (`REG0` bit[2:0] = `100`)
+- Frequency: `433.125 MHz` (channel `23`, `REG2 = 0x17`, base offset `410.125 MHz`)
 - Telemetry transmit period: `200 ms` (`5 Hz`)
 - No application-layer ACK or retransmission is implemented in AKS at this stage.
 
@@ -120,5 +122,8 @@ Planned but not implemented:
 
 - Framed command packets with checksum
 - ACK / retransmission policy
-- Radio configuration management through E32 configuration mode
 - Explicit fault and VCU state fields in uplink telemetry
+
+Note: radio configuration management through the E22 register protocol is
+now implemented (`vTask_LoRa_UKS` boot sequence + `lib/E22Config`) — this
+was previously listed here as a future item under the E32 module.
