@@ -11,11 +11,15 @@
 #include "DisplayHMI.h"
 #include "CanManager.h"
 #include "E22Config.h"
+#include "LinkMonitor.h"
+#include "LoraRxHandler.h"
 #include "OfflineBuffer.h"
 #include "RelayManager.h"
 #include "SystemConfig.h"
 #include "Telemetry.h"
+#include "TelemetrySanitize.h"
 #include "VcuLogic.h"
+#include "VehicleParams.h"
 
 // 24 hücreli BMS gösterge altyapısı (Gerçek veri ile)
 #include "BmsModel.h"
@@ -30,7 +34,17 @@ static constexpr uint32_t STACK_LOG_INTERVAL_MS = 30000;
 
 QueueHandle_t TEL_sensorDataQueue = nullptr;
 
+// --- LoRa link monitörü (vTask_LoRa_UKS yazar, diğer task'lar okur) ---
+static volatile bool   s_linkDown        = false;
+static volatile uint64_t s_lastHeartbeatMs = 0u;  // ms; 0 = henüz heartbeat gelmedi
 
+// --- LoRa RX tanısı: 9.2.a sonrası heartbeat dışı her byte "bilinmeyen" ---
+static uint32_t s_unknownRxByteCount      = 0u;
+static uint64_t s_lastUnknownRxByteWarnMs = 0u;
+
+extern "C" bool LoRa_IsLinkDown(void) {
+    return s_linkDown;
+}
 
 static HMI_VcuState HMI_mapVcuState(VcuLogic::VcuState HMI_state) {
   switch (HMI_state) {
@@ -477,16 +491,80 @@ void vTask_LoRa_UKS(void *pvParameters) {
 
   LO_telemetry.begin();
 
-  // TEKNOFEST rule: communication is strictly one-way (vehicle → UKS).
-  // UKS sends nothing to AKS — no E-Stop, no heartbeat, no commands.
-  // LoRa RX is not processed. TX uses AUX pin to decide send vs buffer.
-
+  uint8_t LO_rxBuffer[4];
   uint32_t lastStackLog = 0;
   TickType_t LO_lastTelemetryTick = 0;
   bool LO_auxNotReadyLogged = false;
 
+  // Boot-grace (9.2.e / 9.4.b.vi, S3): boot anindan itibaren BOOT_LINK_GRACE_MS
+  // icinde hic heartbeat gelmezse link DOWN kabul edilir (bkz.
+  // link_check_timeout_with_boot_grace) — araç açıldığında UKS hiç yayında
+  // değilse buffer'a yazım hemen başlar, veri kaybolmaz.
+  const uint64_t LO_bootMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+
+  // Kesinti örnekleme durumu (S2): 1 Hz'e seyreltilmiş push + ts araligi
+  // (DOWN→UP log satırı için, madde 5).
+  uint64_t LO_lastOfflineSampleMs = 0u;  // 0 = bu kesintide henüz örnek yok
+  uint32_t LO_offlineFirstTs = 0u;
+  uint32_t LO_offlineLastTs  = 0u;
+  bool LO_offlineHasSamples  = false;
+
   while (true) {
     esp_task_wdt_reset();
+
+    int LO_rxLength = uart_read_bytes(LORA_UART_NUM, LO_rxBuffer,
+                                      sizeof(LO_rxBuffer),
+                                      pdMS_TO_TICKS(LORA_RX_TIMEOUT_MS));
+    for (int LO_i = 0; LO_i < LO_rxLength; LO_i++) {
+      // 9.2.a: EMERGENCY_STOP / START_REQUEST / RESET / DRIVE_ENABLE icin
+      // uzaktan (LoRa) tetik kaldirildi — HMI tetigi mevcut (bkz. vTask_HMI
+      // içindeki HMI_CMD_* switch'i).
+      switch (lora_classify_rx_byte(LO_rxBuffer[LO_i])) {
+      case LoraRxByteKind::HEARTBEAT:
+        s_lastHeartbeatMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+        break;
+      case LoraRxByteKind::UNKNOWN: {
+        const uint64_t LO_nowMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+        if (lora_note_unknown_byte(LO_nowMs, &s_unknownRxByteCount,
+                                    &s_lastUnknownRxByteWarnMs,
+                                    LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS)) {
+          ESP_LOGW(TAG,
+                   "LoRa RX: bilinmeyen byte 0x%02X (toplam %lu) — RF gurultu "
+                   "olabilir",
+                   LO_rxBuffer[LO_i], (unsigned long)s_unknownRxByteCount);
+        }
+        break;
+      }
+      }
+    }
+
+    // Link durumu kontrolü — her 10 ms döngüde çalışır
+    {
+      const uint64_t LO_nowMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+      const bool LO_timeout = link_check_timeout_with_boot_grace(
+          LO_nowMs, s_lastHeartbeatMs, LINK_TIMEOUT_MS, LO_bootMs,
+          BOOT_LINK_GRACE_MS);
+      if (LO_timeout && !s_linkDown) {
+        s_linkDown = true;
+        // Yeni kesinti başlıyor — örnekleme saatini ve ts aralığını sıfırla.
+        LO_lastOfflineSampleMs = 0u;
+        LO_offlineHasSamples = false;
+        ESP_LOGW("LINK", "UKS heartbeat timeout — link DOWN");
+      } else if (!LO_timeout && s_linkDown && s_lastHeartbeatMs != 0u) {
+        s_linkDown = false;
+        // 9.4.b.vi: kesinti kaydı + devamlılık zaman damgasıyla denetlenir —
+        // jüri denetiminde gösterilecek tek satırlık DOWN→UP kaydı (madde 5).
+        if (LO_offlineHasSamples) {
+          ESP_LOGI("LINK",
+                   "Heartbeat alindi — link UP: %d paket, ts araligi [%lu..%lu] "
+                   "replay ediliyor",
+                   ob_count(), (unsigned long)LO_offlineFirstTs,
+                   (unsigned long)LO_offlineLastTs);
+        } else {
+          ESP_LOGI("LINK", "Heartbeat alindi — link UP: 0 paket replay edilecek");
+        }
+      }
+    }
 
     const TickType_t LO_nowTick = xTaskGetTickCount();
     if ((LO_nowTick - LO_lastTelemetryTick) >=
@@ -494,24 +572,62 @@ void vTask_LoRa_UKS(void *pvParameters) {
       LO_lastTelemetryTick = LO_nowTick;
 
       if (TEL_sensorDataQueue != nullptr) {
-        TelemetryData LO_live = {};
-        if (xQueuePeek(TEL_sensorDataQueue, &LO_live, 0) == pdTRUE) {
-          if (gpio_get_level(LORA_AUX_PIN) == LORA_AUX_READY_LEVEL) {
-            // AUX ready — first drain any buffered packets, then send live
+        if (!LoRa_IsLinkDown()) {
+          // --- NORMAL MOD: throttled replay + canlı paket (S1) ---
+          // seq (Telemetry::sendStatus içinde artar) yalnızca burada, gerçek
+          // TX anında ilerler — offline'da hiç artmaz. Replay edilen paketler
+          // TX sırasına göre ardışık YENİ seq alır; TUFAN-Monitor'ün
+          // new-boot tespiti (seq artar, ts geriye gider = replay) buna
+          // dayanır (madde 4) — peek/drop_front bu sırayı bozmaz.
+          for (int LO_burst = 0; LO_burst < REPLAY_BURST_PER_TICK; LO_burst++) {
             TelemetryData LO_replay = {};
-            while (ob_pop(LO_replay)) {
-              LO_telemetry.sendStatus(LO_replay);
-              esp_task_wdt_reset();
-              vTaskDelay(pdMS_TO_TICKS(50));
+            if (!ob_peek(LO_replay)) break;
+            if (gpio_get_level(LORA_AUX_PIN) != LORA_AUX_READY_LEVEL) {
+              // AUX meşgul: paket buffer'da KALIR, kaybolmaz — sıradaki
+              // tik'te tekrar denenir.
+              if (!LO_auxNotReadyLogged) {
+                ESP_LOGW(TAG, "LoRa AUX not ready, telemetry TX skipped");
+                LO_auxNotReadyLogged = true;
+              }
+              break;
             }
-            LO_telemetry.sendStatus(LO_live);
+            LO_telemetry.sendStatus(TelemetrySanitize::sanitizeForUplink(LO_replay));
+            ob_drop_front();
             LO_auxNotReadyLogged = false;
-          } else {
-            // AUX busy — buffer the packet for later
-            ob_push(LO_live);
-            if (!LO_auxNotReadyLogged) {
-              ESP_LOGW(TAG, "LoRa AUX not ready, buffering telemetry");
-              LO_auxNotReadyLogged = true;
+            esp_task_wdt_reset();
+          }
+          TelemetryData LO_live = {};
+          if (xQueuePeek(TEL_sensorDataQueue, &LO_live, 0) == pdTRUE) {
+            if (gpio_get_level(LORA_AUX_PIN) == LORA_AUX_READY_LEVEL) {
+              LO_telemetry.sendStatus(TelemetrySanitize::sanitizeForUplink(LO_live));
+              LO_auxNotReadyLogged = false;
+            } else {
+              if (!LO_auxNotReadyLogged) {
+                ESP_LOGW(TAG, "LoRa AUX not ready, telemetry TX skipped");
+                LO_auxNotReadyLogged = true;
+              }
+            }
+          }
+        } else {
+          // --- OFFLINE MOD: canlı TX yok; 1 Hz'e seyreltilmiş örnekle
+          // buffer'a yaz (S2, 9.2.h'ye 5x marj) ---
+          // TEL_timestampMs paket üretildiğinde (CAN task) zaten set edildi;
+          // kesinti aralığının zaman damgasıyla ispatı (9.2.e / 9.4.b.vi)
+          // buna dayanır — burada DEĞİŞTİRİLMEZ.
+          TelemetryData LO_buffered = {};
+          if (xQueuePeek(TEL_sensorDataQueue, &LO_buffered, 0) == pdTRUE) {
+            const uint64_t LO_nowMsSample =
+                (uint64_t)(esp_timer_get_time() / 1000LL);
+            if (offline_should_sample(LO_nowMsSample, LO_lastOfflineSampleMs,
+                                       LO_offlineHasSamples,
+                                       OFFLINE_SAMPLE_PERIOD_MS)) {
+              LO_lastOfflineSampleMs = LO_nowMsSample;
+              ob_push(LO_buffered);
+              if (!LO_offlineHasSamples) {
+                LO_offlineFirstTs = LO_buffered.TEL_timestampMs;
+                LO_offlineHasSamples = true;
+              }
+              LO_offlineLastTs = LO_buffered.TEL_timestampMs;
             }
           }
         }
@@ -519,7 +635,7 @@ void vTask_LoRa_UKS(void *pvParameters) {
     }
 
     logStackUsage("LoRa_Task", lastStackLog);
-    vTaskDelay(pdMS_TO_TICKS(LORA_TX_PERIOD_MS));
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -528,6 +644,28 @@ void vTask_LoRa_UKS(void *pvParameters) {
 // ---------------------------------------------------------------------------
 #ifndef E22_DIAGNOSTIC_MODE
 extern "C" void app_main() {
+#if !VEHICLE_PARAMS_CONFIRMED
+  // 9.2.c.i / 9.4.b.iii / 9.2.f: WHEEL_DIAMETER_M / GEAR_RATIO /
+  // MOTOR_RPM_IS_WHEEL_RPM henüz gerçek değerlerle teyit edilmedi —
+  // hız ve enerji verisi bu haliyle YANLIŞ. Derleme #warning'i
+  // VehicleParams.h'de; bu boot logu sahada/bench'te de görünür kalır.
+  ESP_LOGE(TAG, "ARAC PARAMETRELERI TEYITSIZ — hiz/enerji verisi gecersiz "
+                "(VehicleParams.h)");
+#endif
+
+  // AÇIK İŞ (2026-07-03 merge, Solion SK -> Lithium Balance c-BMS donanım
+  // geçişi): CanParse::parseLbBmsE000 yalnızca packV alanını çözüyor;
+  // tempH/tempL/sysState/current/soc alanları hiçbir CAN ID'den parse
+  // EDİLMİYOR (TelemetryData value-init default'unda kalıyor).
+  // TelemetrySanitize::sanitizeSystemState(0) bunu FAULT(4) yapar — yani
+  // UKS ekranında BMS her zaman FAULT görünür, gerçek bir arıza olmasa
+  // bile. Ayrıca BMS_WARN_MAX_TEMP_C / BMS_CRITICAL_MAX_TEMP_C eşikleri
+  // (SystemConfig.h) hiç tetiklenmez (temp hep 0 okunur). Bkz.
+  // TEKNIK_KONTROL_PROVASI.md "AÇIK İŞ" maddesi (9.2.c.ii).
+  ESP_LOGW(TAG, "BMS: LB parse eksik — tempH/soc/sysState vb. placeholder, "
+                "sysState=FAULT gorunur (bkz. CanParse.cpp Lithium Balance "
+                "stub'lari)");
+
   // --- Hardware initialization (before any tasks) ---
 
   // 1. Initialize relay hardware (SPI + MCP23S17)

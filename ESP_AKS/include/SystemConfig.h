@@ -107,15 +107,34 @@
 
 #define RELAY_TOTAL_CHANNELS 10
 
-// --- UKS LoRa Komut ve Heartbeat Byte Tanımları ---
-#define UKS_CMD_EMERGENCY_STOP 0xA1
-#define UKS_CMD_START          0xA2
-#define UKS_CMD_STOP           0xA3
-#define UKS_CMD_DRIVE_ENABLE   0xA4
-#define UKS_HEARTBEAT_BYTE     0xB0   // UKS ~1 Hz periyodik heartbeat (komut değil)
+// --- UKS LoRa Heartbeat Byte ---
+// 9.2.a: RF hatti tek yonlu telemetri + heartbeat'tir; UKS->AKS komut
+// kanali (eski 0xA1-0xA4) sistemden tamamen kaldirildi.
+#define UKS_HEARTBEAT_BYTE     0xB0   // UKS ~1 Hz periyodik heartbeat (stabilizasyon teyidi)
 
 // --- LoRa Link Monitörü ---
 #define LINK_TIMEOUT_MS        3000U  // 3 sn: 1 Hz heartbeat için 3x marj
+
+// Boot anindan itibaren bu sure icinde HIC heartbeat gelmediyse link DOWN
+// kabul edilir (9.2.e / 9.4.b.vi): arac acildiginda UKS hic yayinda
+// degilse AKS'in sonsuza dek "link UP" varsayip o donemin verisini
+// kaybetmesini onler (bkz. link_check_timeout_with_boot_grace).
+#define BOOT_LINK_GRACE_MS     5000U
+
+// --- Offline Buffer Örnekleme ve Replay (9.2.e / 9.2.h / 9.4.b.vi) ---
+// Kesinti sirasinda buffer'a yazilan ornekleme periyodu. 9.2.h izleme
+// merkezi kayitlari arasi en fazla 5 sn kuralina 5x marjla uyar ve
+// OB_CAPACITY / replay suresini 5'e boler (60 sn'lik kesinti icin 300
+// yerine 60-75 paket).
+#define OFFLINE_SAMPLE_PERIOD_MS 1000U
+
+// Link UP oldugunda tek LORA_TX_PERIOD_MS tikinde en fazla bu kadar
+// buffered (replay) paket gonderilir; canli paket akisi hic kesilmeden
+// (1 canli + en fazla bu kadar replay / tik) buffer bosaltilir (S1).
+#define REPLAY_BURST_PER_TICK  3
+
+// --- LoRa RX Tanısı ---
+#define LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS 10000U  // RF gurultu tanisi icin en fazla 1 WARN / 10 sn
 
 // --- Phase 1 Planning Notes ---
 // Torque command generation is intentionally held at zero until the pedal /
@@ -132,6 +151,12 @@
 // --- Phase 2 Safety Thresholds ---
 // Warning levels should eventually trigger derating.
 // Critical levels should force a transition to FAULT.
+//
+// AÇIK İŞ (Lithium Balance c-BMS geçişi): TEL_bmsTempHighestC/LowestC hiçbir
+// CAN ID'den parse edilmiyor (bkz. CanParse.cpp parseLbBmsE001..E033
+// stub'ları), value-init default'unda (0) kalıyor — bu yüzden aşağıdaki
+// TEMP eşikleri şu an fiilen HİÇ TETİKLENMEZ. CAN ID reverse-engineering'i
+// tamamlanıp gerçek parse eklendiğinde bu not kaldırılmalı.
 #define BMS_WARN_MAX_TEMP_C 55
 #define BMS_CRITICAL_MAX_TEMP_C 70
 // Current thresholds in centi-mA (0.01 mA units) — BMS Pack Current resolution.

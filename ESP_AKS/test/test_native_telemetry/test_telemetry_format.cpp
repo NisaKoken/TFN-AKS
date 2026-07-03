@@ -29,14 +29,14 @@ TelemetryData makeDistinctData() {
     d.TEL_bmsSocHundredths = 6283;          // 62.83%
     d.TEL_bmsDataValid = true;
     d.TEL_timestampMs = 12345;
-    d.TEL_speedKmhX10 = 1413;  // consistent with rpmToSpeedKmhX10(1500)
+    d.TEL_speedKmhX10 = 1413;  // rpmToSpeedKmhX10(1500) ile tutarlı
     return d;
 }
 
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// begin() not called: no bytes should be written to UART.
+// begin() çağrılmadan sendStatus(): hiçbir byte UART'a yazılmamalı.
 // ---------------------------------------------------------------------------
 void test_no_write_before_begin(void) {
     fake_uart_reset();
@@ -46,82 +46,56 @@ void test_no_write_before_begin(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Packet must use semicolon (;) as field separator — TEKNOFEST mandatory.
+// İlk paket "TEL,2,0," ile başlamalı (versiyon=2, seq=0).
 // ---------------------------------------------------------------------------
-void test_semicolon_separator(void) {
+void test_first_packet_has_v1_seq0_prefix(void) {
     fake_uart_reset();
     Telemetry tel;
     tel.begin();
     tel.sendStatus(makeZeroData());
 
     const char* buf = fake_uart_get_buffer();
-    // Zero data: "0;0;0;0;0\r\n" — four semicolons expected, no commas
-    TEST_ASSERT_NOT_NULL(strstr(buf, ";"));
-    TEST_ASSERT_NULL(strstr(buf, ","));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "TEL,2,0,"));
 }
 
 // ---------------------------------------------------------------------------
-// Field order: zaman_ms;hiz_kmh;T_bat_C;V_bat_C;kalan_enerji_Wh
+// Ardışık 3 çağrı: seq 0,1,2 olarak monoton artmalı.
 // ---------------------------------------------------------------------------
-void test_field_order(void) {
+void test_sequence_increments(void) {
     fake_uart_reset();
     Telemetry tel;
     tel.begin();
-
-    TelemetryData d = makeZeroData();
-    d.TEL_timestampMs = 10000;
-    d.TEL_bmsTempHighestC = 24;
-    d.TEL_bmsPackVoltageDeciV = 400;  // 40.0 V deciV
-    tel.sendStatus(d);
+    tel.sendStatus(makeZeroData());
+    tel.sendStatus(makeZeroData());
+    tel.sendStatus(makeZeroData());
 
     const char* buf = fake_uart_get_buffer();
-    // Expected: "10000;0;24;400;0\r\n"
-    TEST_ASSERT_EQUAL_STRING("10000;0;24;400;0\r\n", buf);
+    TEST_ASSERT_NOT_NULL(strstr(buf, "TEL,2,0,"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "TEL,2,1,"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "TEL,2,2,"));
 }
 
 // ---------------------------------------------------------------------------
-// hiz_kmh must always be 0 (placeholder until wheel diameter is known).
+// begin() çağrısı sequence counter'ı 0'a sıfırlamalı.
 // ---------------------------------------------------------------------------
-void test_speed_placeholder_zero(void) {
+void test_begin_resets_sequence(void) {
     fake_uart_reset();
     Telemetry tel;
     tel.begin();
+    tel.sendStatus(makeZeroData());
+    tel.sendStatus(makeZeroData());  // seq 0 ve 1
 
-    TelemetryData d = makeZeroData();
-    d.TEL_timestampMs = 5000;
-    d.TEL_motorRpm = 3000;           // RPM is set but speed should still be 0
-    d.TEL_speedKmhX10 = 2826;        // speedKmhX10 is set but format ignores it
-    d.TEL_bmsTempHighestC = 25;
-    d.TEL_bmsPackVoltageDeciV = 780;
-    tel.sendStatus(d);
+    fake_uart_reset();  // önceki içeriği temizle
+    tel.begin();        // yeniden başlat
+    tel.sendStatus(makeZeroData());
 
     const char* buf = fake_uart_get_buffer();
-    // Second field (hiz_kmh) must be 0
-    TEST_ASSERT_EQUAL_STRING("5000;0;25;780;0\r\n", buf);
+    TEST_ASSERT_NOT_NULL(strstr(buf, "TEL,2,0,"));
+    TEST_ASSERT_NULL(strstr(buf, "TEL,2,1,"));
 }
 
 // ---------------------------------------------------------------------------
-// kalan_enerji_Wh must always be 0 (placeholder until battery capacity known).
-// ---------------------------------------------------------------------------
-void test_energy_placeholder_zero(void) {
-    fake_uart_reset();
-    Telemetry tel;
-    tel.begin();
-
-    TelemetryData d = makeZeroData();
-    d.TEL_timestampMs = 7000;
-    d.TEL_bmsSocHundredths = 9500;  // SOC is set but energy should still be 0
-    d.TEL_bmsTempHighestC = 30;
-    d.TEL_bmsPackVoltageDeciV = 800;
-    tel.sendStatus(d);
-
-    const char* buf = fake_uart_get_buffer();
-    // Last field (kalan_enerji_Wh) must be 0
-    TEST_ASSERT_EQUAL_STRING("7000;0;30;800;0\r\n", buf);
-}
-
-// ---------------------------------------------------------------------------
-// Packet must end with \r\n.
+// Paket "\r\n" ile sonlanmalı.
 // ---------------------------------------------------------------------------
 void test_packet_ends_with_crlf(void) {
     fake_uart_reset();
@@ -137,8 +111,30 @@ void test_packet_ends_with_crlf(void) {
 }
 
 // ---------------------------------------------------------------------------
-// Negative temperature is correctly formatted in the T_bat_C field.
+// Negatif torque işaretle birlikte yazılmalı.
 // ---------------------------------------------------------------------------
+void test_negative_torque_is_formatted(void) {
+    fake_uart_reset();
+    Telemetry tel;
+    tel.begin();
+    TelemetryData d = makeZeroData();
+    d.TEL_motorTorqueFeedback = -500;
+    tel.sendStatus(d);
+
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",-500,"));
+}
+
+void test_negative_current_is_formatted(void) {
+    fake_uart_reset();
+    Telemetry tel;
+    tel.begin();
+    TelemetryData d = makeZeroData();
+    d.TEL_bmsCurrentCentiMa = -128;
+    tel.sendStatus(d);
+
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",-128,"));
+}
+
 void test_negative_temperature_is_formatted(void) {
     fake_uart_reset();
     Telemetry tel;
@@ -147,12 +143,50 @@ void test_negative_temperature_is_formatted(void) {
     d.TEL_bmsTempHighestC = -20;
     tel.sendStatus(d);
 
-    // Format: "0;0;-20;0;0\r\n"
-    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ";-20;"));
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",-20,"));
 }
 
 // ---------------------------------------------------------------------------
-// Full format with distinct values: all fields in correct position.
+// Boolean alanlar 0/1 olarak render edilmeli.
+// ---------------------------------------------------------------------------
+void test_motor_valid_renders_as_one(void) {
+    fake_uart_reset();
+    Telemetry tel;
+    tel.begin();
+    TelemetryData d = makeZeroData();
+    d.TEL_motorDataValid = true;
+    tel.sendStatus(d);
+
+    // Format: TEL,2,0,rpm,torque,motorErr,motorValid,motorTimeout,...
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), "TEL,2,0,0,0,0,1,0,"));
+}
+
+void test_motor_timeout_renders_as_one(void) {
+    fake_uart_reset();
+    Telemetry tel;
+    tel.begin();
+    TelemetryData d = makeZeroData();
+    d.TEL_motorTimeoutActive = true;
+    tel.sendStatus(d);
+
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), "TEL,2,0,0,0,0,0,1,"));
+}
+
+void test_bms_valid_renders_as_one(void) {
+    fake_uart_reset();
+    Telemetry tel;
+    tel.begin();
+    TelemetryData d = makeZeroData();
+    d.TEL_bmsDataValid = true;
+    tel.sendStatus(d);
+
+    // v2: bmsDataValid artık son alan değil; ts_ms=0, spd_x10=0 arkasından gelir.
+    // makeZeroData ile bitiş: "...,1,0,0\r\n"
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",1,0,0\r\n"));
+}
+
+// ---------------------------------------------------------------------------
+// Tüm alanları farklı değerlerle dolduran tam payload kontrolü.
 // ---------------------------------------------------------------------------
 void test_full_format_with_distinct_values(void) {
     fake_uart_reset();
@@ -161,13 +195,13 @@ void test_full_format_with_distinct_values(void) {
     tel.sendStatus(makeDistinctData());
 
     const char* buf = fake_uart_get_buffer();
-    // TEL_timestampMs=12345, hiz_kmh=0, T_bat_C=32, V_bat_C=780, kalan_enerji_Wh=0
-    const char* expected = "12345;0;32;780;0\r\n";
+    const char* expected =
+        "TEL,2,0,1500,-250,5,1,0,37734,37422,32,31,2,780,-181610,6283,1,12345,1413\r\n";
     TEST_ASSERT_EQUAL_STRING(expected, buf);
 }
 
 // ---------------------------------------------------------------------------
-// Two consecutive packets separated by \r\n and next timestamp.
+// İki paket aralarında "\r\nTEL," ayırıcısı olmalı.
 // ---------------------------------------------------------------------------
 void test_two_packets_have_separator(void) {
     fake_uart_reset();
@@ -176,32 +210,13 @@ void test_two_packets_have_separator(void) {
     tel.sendStatus(makeZeroData());
     tel.sendStatus(makeZeroData());
 
-    // Both are "0;0;0;0;0\r\n" — second packet starts after first \r\n
-    const char* buf = fake_uart_get_buffer();
-    TEST_ASSERT_EQUAL_STRING("0;0;0;0;0\r\n0;0;0;0;0\r\n", buf);
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), "\r\nTEL,"));
 }
 
 // ---------------------------------------------------------------------------
-// begin() resets state — sending works after re-initialization.
+// ts_ms doğru pozisyon ve değerle encode edilmeli.
 // ---------------------------------------------------------------------------
-void test_begin_resets_state(void) {
-    fake_uart_reset();
-    Telemetry tel;
-    tel.begin();
-    tel.sendStatus(makeZeroData());
-
-    fake_uart_reset();  // clear previous output
-    tel.begin();        // re-init
-    tel.sendStatus(makeZeroData());
-
-    const char* buf = fake_uart_get_buffer();
-    TEST_ASSERT_EQUAL_STRING("0;0;0;0;0\r\n", buf);
-}
-
-// ---------------------------------------------------------------------------
-// Timestamp encodes correctly in the first field.
-// ---------------------------------------------------------------------------
-void test_timestamp_encoded_first_field(void) {
+void test_ts_ms_is_encoded(void) {
     fake_uart_reset();
     Telemetry tel;
     tel.begin();
@@ -209,24 +224,23 @@ void test_timestamp_encoded_first_field(void) {
     d.TEL_timestampMs = 99999;
     tel.sendStatus(d);
 
-    const char* buf = fake_uart_get_buffer();
-    // First field is 99999
-    TEST_ASSERT_EQUAL_STRING("99999;0;0;0;0\r\n", buf);
+    // bmsDataValid=0, ts_ms=99999, spd_x10=0 → ",0,99999,0\r\n"
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",0,99999,0\r\n"));
 }
 
 // ---------------------------------------------------------------------------
-// Pack voltage (V_bat_C) encodes as deciV integer.
+// spd_x10 doğru pozisyon ve değerle encode edilmeli.
 // ---------------------------------------------------------------------------
-void test_pack_voltage_encoded(void) {
+void test_spd_x10_is_encoded(void) {
     fake_uart_reset();
     Telemetry tel;
     tel.begin();
     TelemetryData d = makeZeroData();
-    d.TEL_bmsPackVoltageDeciV = 812;  // 81.2 V
+    d.TEL_speedKmhX10 = 423;
     tel.sendStatus(d);
 
-    const char* buf = fake_uart_get_buffer();
-    TEST_ASSERT_NOT_NULL(strstr(buf, ";812;"));
+    // ts_ms=0, spd_x10=423 → ",0,0,423\r\n"
+    TEST_ASSERT_NOT_NULL(strstr(fake_uart_get_buffer(), ",0,0,423\r\n"));
 }
 
 // ---------------------------------------------------------------------------
@@ -281,4 +295,56 @@ void test_rpm_to_speed_clamp_just_above_threshold_rpm(void) {
 void test_rpm_to_speed_no_clamp_just_below_threshold_rpm(void) {
     uint16_t result = rpmToSpeedKmhX10(3182u);
     TEST_ASSERT_TRUE(result < TEL_SPD_X10_MAX);
+}
+
+// ---------------------------------------------------------------------------
+// rpmToSpeedKmhX10Impl — el hesabı testleri. Bilinçli olarak
+// VehicleParams.h'deki WHEEL_DIAMETER_M/GEAR_RATIO makrolarına DEĞİL,
+// testin kendi yerel D/GR sabitlerine bağlıdır: gerçek araç değerleri
+// VehicleParams.h'de güncellendiğinde bu testler KIRILMAMALIDIR.
+// ---------------------------------------------------------------------------
+
+// D=0.5 m, GR=1.0 (mevcut placeholder ile aynı, ama makro yerine yerel
+// literal kullanılıyor), motorRpmIsWheelRpm=false, rpm=1500:
+// km/h = 1500*pi*0.5*60/1000 ≈ 141.37 → x10 = 1413 (mevcut clamp testiyle
+// aynı beklenen değer — refactor'ün üretim yolunu bozmadığını kanıtlar).
+void test_impl_hand_calc_motor_rpm_with_gear_ratio(void) {
+    uint16_t result = rpmToSpeedKmhX10Impl(1500u, 0.5f, 1.0f, false);
+    TEST_ASSERT_EQUAL_UINT16(1413, result);
+}
+
+// D=1.0 m, GR=2.0, motorRpmIsWheelRpm=false, rpm=1000:
+// wheelRpm = 1000/2.0 = 500 → km/h = 500*pi*1.0*60/1000 ≈ 94.2478 → x10=942.
+// GR farklı bir değerle de doğru bölündüğünü kanıtlar (D=0.5/GR=1.0'a
+// özel bir davranış olmadığını gösterir).
+void test_impl_hand_calc_different_wheel_and_gear_ratio(void) {
+    uint16_t result = rpmToSpeedKmhX10Impl(1000u, 1.0f, 2.0f, false);
+    TEST_ASSERT_EQUAL_UINT16(942, result);
+}
+
+// ---------------------------------------------------------------------------
+// MOTOR_RPM_IS_WHEEL_RPM dallanması: motorRpmIsWheelRpm=true iken GEAR_RATIO
+// bölmesi TAMAMEN atlanmalı — GR=5.0 verilse bile sonuç GR'den etkilenmez.
+// D=0.5, rpm=500: km/h = 500*pi*0.5*60/1000 ≈ 47.1239 → x10=471.
+// ---------------------------------------------------------------------------
+void test_impl_motor_rpm_is_wheel_rpm_skips_gear_ratio(void) {
+    uint16_t withFlagTrue = rpmToSpeedKmhX10Impl(500u, 0.5f, 5.0f, true);
+    TEST_ASSERT_EQUAL_UINT16(471, withFlagTrue);
+}
+
+// Aynı rpm/D, motorRpmIsWheelRpm=false, GR=5.0 → GR'ye bölünür, sonuç
+// yukarıdakinden belirgin şekilde FARKLI olmalı (dallanmanın gerçekten
+// etkili olduğunu kanıtlar): wheelRpm=100 → km/h≈9.4248 → x10=94.
+void test_impl_motor_rpm_false_applies_gear_ratio(void) {
+    uint16_t withFlagFalse = rpmToSpeedKmhX10Impl(500u, 0.5f, 5.0f, false);
+    TEST_ASSERT_EQUAL_UINT16(94, withFlagFalse);
+}
+
+// ---------------------------------------------------------------------------
+// Impl fonksiyonu da TEL_SPD_X10_MAX clamp'ini uygulamalı (sarmalayıcıya
+// özel bir davranış değil, çekirdek fonksiyonun kendisinde).
+// ---------------------------------------------------------------------------
+void test_impl_applies_clamp(void) {
+    uint16_t result = rpmToSpeedKmhX10Impl(65535u, 0.5f, 1.0f, false);
+    TEST_ASSERT_EQUAL_UINT16(TEL_SPD_X10_MAX, result);
 }

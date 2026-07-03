@@ -19,57 +19,71 @@ Loss handling policy:
 - If a packet is missed, the next packet replaces it.
 - UKS should detect packet loss by checking the telemetry sequence counter.
 
-## UKS -> AKS Command Bytes
+## RF hattı tek yönlü (9.2.a)
 
-Single-byte command values currently recognized by AKS:
+TEKNOFEST Elektromobil yönetmeliği madde 9.2.a gereği araç ile izleme
+merkezi arasındaki haberleşme yalnızca araçtan izleme merkezine (AKS ->
+UKS) tek yönlü veri aktarımı olacak şekildedir. Bu maddenin tek istisnası,
+haberleşme stabilizasyonunu teyit amaçlı UKS -> AKS **heartbeat**
+sinyalidir (`0xB0`, bkz. aşağıdaki tablo) — içerik taşımaz, yalnızca
+UKS'in canlı olduğunu doğrular.
 
-| Symbol | Value | Meaning |
+Bu nedenle UKS -> AKS yönünde eskiden var olan tek-byte komut kanalı
+(`UKS_CMD_EMERGENCY_STOP` `0xA1`, `UKS_CMD_START` `0xA2`, `UKS_CMD_STOP`
+`0xA3`, `UKS_CMD_DRIVE_ENABLE` `0xA4`) sistemden tamamen kaldırılmıştır.
+Elektromobil sınıfında uzaktan durdurma zorunluluğu yoktur; acil durdurma
+araç üstündeki fiziksel kontaktörle sağlanır, RF hattından bağımsızdır.
+
+AKS RX davranışı:
+
+| Byte | Anlam | Davranış |
 | --- | --- | --- |
-| `UKS_CMD_EMERGENCY_STOP` | `0xA1` | Immediate emergency stop request |
-| `UKS_CMD_START` | `0xA2` | Request `IDLE -> READY` |
-| `UKS_CMD_STOP` | `0xA3` | Request reset / stop |
-| `UKS_CMD_DRIVE_ENABLE` | `0xA4` | Request `READY -> DRIVE` |
+| `UKS_HEARTBEAT_BYTE` (`0xB0`) | Stabilizasyon teyidi (~1 Hz) | `s_lastHeartbeatMs` güncellenir → `LinkMonitor` / `OfflineBuffer` zinciri |
+| Diğer her byte | Tanımsız / RF gürültüsü | Yok sayılır; sayaç artar; en fazla 1 WARN / 10 sn (bkz. `LoraRxHandler.h`) |
 
-Receiver behavior:
+AKS komut CRC'si, çerçeveleme byte'ı veya yeniden gönderim mekanizması
+implemente etmiyor — bunlara artık ihtiyaç yok, çünkü işlenen tek RX
+byte'ı heartbeat'tir.
 
-- Unknown command bytes are ignored.
-- Commands are interpreted from `LO_rxBuffer[0]`.
-- AKS does not currently implement command CRC, framing bytes, or retransmission.
-
-## AKS -> UKS Telemetry Format
+## AKS -> UKS Telemetry Format (v2, 19 fields)
 
 AKS transmits one ASCII CSV line per sample with `CRLF` line termination.
 
-Example:
+Example (real AKS golden-test vector, see `ESP_AKS` native tests):
 
 ```text
-TEL,1,42,3150,12,0,1,0,77,-15,28,612,3400,0,1
+TEL,2,0,1500,-250,5,1,0,37734,37422,32,31,2,780,-181610,6283,1,12345,1413
 ```
 
 Field order is fixed and must be parsed positionally:
 
-| Index | Field | Type | Description |
-| --- | --- | --- | --- |
-| 0 | `TEL` | literal | Packet type tag |
-| 1 | protocol version | `uint8` | Current value: `1` |
-| 2 | sequence | `uint32` | Increments on each successful TX |
-| 3 | motor RPM | `uint16` | Latest motor RPM |
-| 4 | motor torque feedback | `int16` | Latest signed torque feedback |
-| 5 | motor error flags | `uint8` | Motor fault flags |
-| 6 | motor data valid | `0/1` | `1` if latest motor frame is considered fresh |
-| 7 | motor timeout active | `0/1` | `1` if motor status timed out after first reception |
-| 8 | BMS SOC | `uint8` | State of charge in percent |
-| 9 | BMS current | `int16` | Pack current in deci-amps |
-| 10 | BMS temperature | `int16` | Degrees Celsius |
-| 11 | BMS pack voltage | `uint16` | Deci-volts |
-| 12 | BMS average cell voltage | `uint16` | Millivolts |
-| 13 | BMS error flags | `uint8` | BMS fault flags |
-| 14 | BMS data valid | `0/1` | `1` if BMS telemetry fields are populated |
+| Index | Field | Type | Scale | Description |
+| --- | --- | --- | --- | --- |
+| 0 | `TEL` | literal | — | Packet type tag |
+| 1 | `ver` | `uint8` | — | Protocol version (current: `2`) |
+| 2 | `seq` | `uint32` | — | Increments on each successful TX |
+| 3 | `rpm` | `uint16` | raw | Latest motor RPM |
+| 4 | `torque` | `int16` | raw | Latest signed torque feedback |
+| 5 | `motorErr` | `uint8` | bit flags | Motor fault flags |
+| 6 | `motorValid` | `0/1` | — | `1` if latest motor frame is considered fresh |
+| 7 | `motorTimeout` | `0/1` | — | `1` if motor status timed out after first reception |
+| 8 | `cellVMax` | `uint16` | ×0.1 mV | Highest cell voltage |
+| 9 | `cellVMin` | `uint16` | ×0.1 mV | Lowest cell voltage |
+| 10 | `tempH` | `int16` (source `int8`) | °C | Highest BMS temperature |
+| 11 | `tempL` | `int16` (source `int8`) | °C | Lowest BMS temperature |
+| 12 | `sysState` | `uint8` | enum | `1`=Discharge `2`=IDLE `3`=Charge `4`=FAULT |
+| 13 | `packV` | `uint16` | ×0.1 V | Pack voltage |
+| 14 | `current` | `int32` | ×0.01 mA | Pack current (`+`charge / `-`discharge) |
+| 15 | `soc` | `uint16` | ×0.01 % | State of charge (`10000`=100.00%) |
+| 16 | `bmsValid` | `0/1` | — | `1` if BMS telemetry fields are populated |
+| 17 | `ts_ms` | `uint32` | ms | Milliseconds since AKS boot |
+| 18 | `spd_x10` | `uint16` | ×0.1 km/h | Vehicle speed |
 
 UKS parser requirements:
 
-- Reject packets whose field count is not exactly `15`.
+- Reject packets whose field count is not exactly `19`.
 - Reject packets whose tag is not `TEL`.
+- Reject packets whose `ver` is not `2`.
 - Track `sequence` to detect dropped packets.
 - Treat repeated `sequence` values as duplicate or stale samples.
 
@@ -117,9 +131,12 @@ UKS'in kabul aralığı dışına kesinlikle çıkmayan değerler üretmelidir.
 
 ## Future Extensions
 
-Planned but not implemented:
+Cancelled: framed command packets with checksum — the UKS -> AKS command
+channel was removed entirely for 9.2.a compliance (see "RF hattı tek
+yönlü (9.2.a)" above); there is no command payload left to frame.
 
-- Framed command packets with checksum
+Still planned but not implemented:
+
 - ACK / retransmission policy
 - Explicit fault and VCU state fields in uplink telemetry
 
