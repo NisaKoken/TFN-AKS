@@ -93,15 +93,16 @@
 
 #define RELAY_TOTAL_CHANNELS 10
 
-// --- UKS LoRa Komut ve Heartbeat Byte Tanımları ---
-#define UKS_CMD_EMERGENCY_STOP 0xA1
-#define UKS_CMD_START          0xA2
-#define UKS_CMD_STOP           0xA3
-#define UKS_CMD_DRIVE_ENABLE   0xA4
-#define UKS_HEARTBEAT_BYTE     0xB0   // UKS ~1 Hz periyodik heartbeat (komut değil)
+// --- UKS LoRa Heartbeat Byte ---
+// 9.2.a: RF hatti tek yonlu telemetri + heartbeat'tir; UKS->AKS komut
+// kanali (eski 0xA1-0xA4) sistemden tamamen kaldirildi.
+#define UKS_HEARTBEAT_BYTE     0xB0   // UKS ~1 Hz periyodik heartbeat (stabilizasyon teyidi)
 
 // --- LoRa Link Monitörü ---
 #define LINK_TIMEOUT_MS        3000U  // 3 sn: 1 Hz heartbeat için 3x marj
+
+// --- LoRa RX Tanısı ---
+#define LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS 10000U  // RF gurultu tanisi icin en fazla 1 WARN / 10 sn
 
 // --- Phase 1 Planning Notes ---
 // Torque command generation is intentionally held at zero until the pedal /

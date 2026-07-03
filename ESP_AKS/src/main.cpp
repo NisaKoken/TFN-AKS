@@ -12,6 +12,7 @@
 #include "CanManager.h"
 #include "E22Config.h"
 #include "LinkMonitor.h"
+#include "LoraRxHandler.h"
 #include "OfflineBuffer.h"
 #include "RelayManager.h"
 #include "SystemConfig.h"
@@ -34,6 +35,10 @@ QueueHandle_t TEL_sensorDataQueue = nullptr;
 // --- LoRa link monitörü (vTask_LoRa_UKS yazar, diğer task'lar okur) ---
 static volatile bool   s_linkDown        = false;
 static volatile uint64_t s_lastHeartbeatMs = 0u;  // ms; 0 = henüz heartbeat gelmedi
+
+// --- LoRa RX tanısı: 9.2.a sonrası heartbeat dışı her byte "bilinmeyen" ---
+static uint32_t s_unknownRxByteCount      = 0u;
+static uint64_t s_lastUnknownRxByteWarnMs = 0u;
 
 extern "C" bool LoRa_IsLinkDown(void) {
     return s_linkDown;
@@ -496,25 +501,25 @@ void vTask_LoRa_UKS(void *pvParameters) {
                                       sizeof(LO_rxBuffer),
                                       pdMS_TO_TICKS(LORA_RX_TIMEOUT_MS));
     for (int LO_i = 0; LO_i < LO_rxLength; LO_i++) {
-      switch (LO_rxBuffer[LO_i]) {
-      case UKS_CMD_EMERGENCY_STOP:
-        VcuLogic::postEvent(VcuLogic::VcuEvent::EMERGENCY_STOP);
-        break;
-      case UKS_CMD_START:
-        VcuLogic::postEvent(VcuLogic::VcuEvent::START_REQUEST);
-        break;
-      case UKS_CMD_STOP:
-        VcuLogic::postEvent(VcuLogic::VcuEvent::RESET);
-        break;
-      case UKS_CMD_DRIVE_ENABLE:
-        ESP_LOGI(TAG, "LoRa command: DRIVE ENABLE request");
-        VcuLogic::postEvent(VcuLogic::VcuEvent::DRIVE_ENABLE);
-        break;
-      case UKS_HEARTBEAT_BYTE:
+      // 9.2.a: EMERGENCY_STOP / START_REQUEST / RESET / DRIVE_ENABLE icin
+      // uzaktan (LoRa) tetik kaldirildi — HMI tetigi mevcut (bkz. vTask_HMI
+      // içindeki HMI_CMD_* switch'i).
+      switch (lora_classify_rx_byte(LO_rxBuffer[LO_i])) {
+      case LoraRxByteKind::HEARTBEAT:
         s_lastHeartbeatMs = (uint64_t)(esp_timer_get_time() / 1000LL);
         break;
-      default:
+      case LoraRxByteKind::UNKNOWN: {
+        const uint64_t LO_nowMs = (uint64_t)(esp_timer_get_time() / 1000LL);
+        if (lora_note_unknown_byte(LO_nowMs, &s_unknownRxByteCount,
+                                    &s_lastUnknownRxByteWarnMs,
+                                    LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS)) {
+          ESP_LOGW(TAG,
+                   "LoRa RX: bilinmeyen byte 0x%02X (toplam %lu) — RF gurultu "
+                   "olabilir",
+                   LO_rxBuffer[LO_i], (unsigned long)s_unknownRxByteCount);
+        }
         break;
+      }
       }
     }
 
