@@ -70,6 +70,10 @@ struct TelemetryData {
     uint16_t TEL_bmsE000RawCounter2;  // byte[6:7] — HIPOTEZ-düşük: kapasite/sayaç adayı; UNVERIFIED — scale unknown (DLC<8 ise 0)
 
     bool TEL_bmsDataValid;
+    // Post-reception E000 freshness kaybı (krş. TEL_motorTimeoutActive).
+    // En az bir E000 görüldükten sonra CAN_BMS_STATUS_TIMEOUT_MS içinde yeni
+    // frame gelmezse true olur; VcuLogic IDLE dışında kritik fault sayar.
+    bool TEL_bmsTimeoutActive;
 
     uint32_t TEL_timestampMs   = 0;   // ms since boot — stamped when packet is created
     uint16_t TEL_speedKmhX10  = 0;   // vehicle speed ×10 km/h, filled via rpmToSpeedKmhX10()

@@ -83,6 +83,23 @@ bool parseLbBmsE032(const twai_message_t& msg, TelemetryData& out);
 // 0xE033 — TODO: alan anlamı doğrulanmadı, ham byte'lar loglanıyor
 bool parseLbBmsE033(const twai_message_t& msg, TelemetryData& out);
 
+// Pack voltajı güvenlik eşiği sonucu (yalnızca DOĞRULANMIŞ packV alanına
+// uygulanır — bkz. SystemConfig.h "Phase 2 Safety Thresholds").
+enum class BmsPackVoltageFault : uint8_t {
+    NONE = 0,
+    UNDERVOLTAGE = 1,
+    OVERVOLTAGE = 2,
+};
+
+// Saf eşik kontrolü: packVoltageDeciV <= criticalMinDeciV -> UNDERVOLTAGE,
+// >= criticalMaxDeciV -> OVERVOLTAGE, aksi halde NONE. Eşikler parametrik —
+// üretim kodu SystemConfig.h CRITICAL sabitlerini geçirir, native testler
+// kendi değerlerini verebilir. (<=/>= semantiği VcuLogic hasCriticalCondition
+// ile aynıdır.)
+BmsPackVoltageFault checkPackVoltageFault(uint16_t packVoltageDeciV,
+                                          uint16_t criticalMinDeciV,
+                                          uint16_t criticalMaxDeciV);
+
 // Motor status timeout: en az bir paket görülmüş AND son veri valid AND
 // (now - lastTick) >= timeoutTicks. Diğer durumlarda false.
 // TickType_t unsigned olduğundan wraparound doğal aritmetikle desteklenir.

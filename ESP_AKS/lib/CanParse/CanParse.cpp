@@ -124,6 +124,16 @@ bool parseLbBmsE033(const twai_message_t& msg, TelemetryData& out) {
     return msg.data_length_code > 0;
 }
 
+BmsPackVoltageFault checkPackVoltageFault(uint16_t packVoltageDeciV,
+                                          uint16_t criticalMinDeciV,
+                                          uint16_t criticalMaxDeciV) {
+    if (packVoltageDeciV <= criticalMinDeciV)
+        return BmsPackVoltageFault::UNDERVOLTAGE;
+    if (packVoltageDeciV >= criticalMaxDeciV)
+        return BmsPackVoltageFault::OVERVOLTAGE;
+    return BmsPackVoltageFault::NONE;
+}
+
 bool isMotorStatusTimedOut(bool hasSeen,
                            bool lastValid,
                            TickType_t now,

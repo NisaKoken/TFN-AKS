@@ -31,6 +31,14 @@ extern void test_e000_session2_end_frame(void);
 extern void test_e000_dlc_2_too_short(void);
 extern void test_e000_dlc_6_counter2_deterministic_zero(void);
 
+// checkPackVoltageFault — saf pack voltajı eşik kontrolü (DOĞRULANMIŞ sinyal)
+extern void test_packv_fault_599_is_undervoltage(void);
+extern void test_packv_fault_600_boundary_is_undervoltage(void);
+extern void test_packv_fault_790_is_ok(void);
+extern void test_packv_fault_601_875_band_is_ok(void);
+extern void test_packv_fault_876_boundary_is_overvoltage(void);
+extern void test_packv_fault_877_is_overvoltage(void);
+
 // Charger komut frame'i — CAN ID 0x1806E5F4 (DOĞRULANDI)
 extern void test_charger_dlc_too_short(void);
 extern void test_charger_session2_frame(void);
@@ -94,6 +102,14 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_e000_session2_end_frame);
     RUN_TEST(test_e000_dlc_2_too_short);
     RUN_TEST(test_e000_dlc_6_counter2_deterministic_zero);
+
+    // checkPackVoltageFault — saf pack voltajı eşik kontrolü
+    RUN_TEST(test_packv_fault_599_is_undervoltage);
+    RUN_TEST(test_packv_fault_600_boundary_is_undervoltage);
+    RUN_TEST(test_packv_fault_790_is_ok);
+    RUN_TEST(test_packv_fault_601_875_band_is_ok);
+    RUN_TEST(test_packv_fault_876_boundary_is_overvoltage);
+    RUN_TEST(test_packv_fault_877_is_overvoltage);
 
     // Charger komut frame'i — CAN ID 0x1806E5F4 (DOĞRULANDI)
     RUN_TEST(test_charger_dlc_too_short);

@@ -75,6 +75,11 @@ class CanManager {
     bool CAN_bmsE000Valid = false;
     bool CAN_bmsTimeoutLogged = false;
 
+    // Pack voltajı eşik ihlali bayrakları (bit0 = undervoltage,
+    // bit1 = overvoltage). Motor errorFlags ile aynı edge-trigger deseni:
+    // notifyFaultIfNeeded yalnızca değişimde CAN_Event yayınlar.
+    uint8_t CAN_bmsPackFaultFlags = 0;
+
     // Charger freshness tracking — 0x1806E5F4 (OPSİYONEL akış).
     // Bayatlama yalnızca CAN_chargerValid'i düşürür; FAULT üretmez.
     ChargerCommand s_chargerCommand = {};
