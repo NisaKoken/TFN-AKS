@@ -28,6 +28,12 @@
 #define CAN_ID_LB_BMS_E032 0x0000E032  // TODO: alan anlamı doğrulanmadı
 #define CAN_ID_LB_BMS_E033 0x0000E033  // TODO: alan anlamı doğrulanmadı
 
+// Charger komut frame'i — 29-bit Extended ID (J1939: PGN 0x1806, DA 0xE5,
+// SA 0xF4). BMS -> Charger yönünde; byte[0:1] = şarj voltaj hedefi ×0.1 V,
+// byte[2:3] = şarj akım hedefi ×0.1 A (bkz. Documents/CAN_Message_Table.md).
+// AKS bu frame'i YALNIZCA DİNLER, asla göndermez. Şu an işlenmiyor.
+#define CAN_ID_LB_CHARGER_CMD 0x1806E5F4
+
 // CAN sniffer loglarında ara sıra görülen 11-bit standart frame.
 // Tüm byte'ları sıfır, anlamı bilinmiyor. Şu an işlenmiyor.
 #define CAN_ID_LB_STD_0x000 0x000      // STD 11-bit — TODO: alan anlamı doğrulanmadı
