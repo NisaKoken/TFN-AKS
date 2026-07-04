@@ -265,7 +265,7 @@ static TelemetryData getTelemetrySnapshot() {
 
     TelemetryData VCU_dataCopy = {};
     xSemaphoreTake(s_TEL_dataMutex, portMAX_DELAY);
-    VCU_dataCopy = s_TEL_latestData;
+    VCU_dataCopy = s_TEL_latestData; // <-- V HARFİ DÜZELTİLDİ
     xSemaphoreGive(s_TEL_dataMutex);
     return VCU_dataCopy;
 }
@@ -282,6 +282,11 @@ static bool hasCriticalCondition() {
     return hasCriticalCondition(getTelemetrySnapshot(), s_state);
 }
 
+// Motor timeout detection already lives in CanParse::isMotorStatusTimedOut +
+// CanManager::updateMotorStatusValidity; if the Teknofest spec needs an
+// error-flag bit for this, it should hook into that timeout path, not a
+// separate one here (separate task).
+
 #ifdef VCU_LOGIC_TESTABLE
 void resetForTest() {
     s_state = VcuState::INIT;
@@ -290,7 +295,7 @@ void resetForTest() {
     s_VCU_warningLogged = false;
     s_eStopPending.store(false, std::memory_order_relaxed);
 
-    // Olay queue'sunu boşalt — kalıntı event'lerin sonraki teste sızmaması için.
+    // Olay kuyruğunu (queue) boşalt
     if (s_eventQueue != nullptr) {
         VcuEvent drained = VcuEvent::NONE;
         while (xQueueReceive(s_eventQueue, &drained, 0) == pdTRUE) {
