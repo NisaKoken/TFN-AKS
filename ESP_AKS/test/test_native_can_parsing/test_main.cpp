@@ -27,6 +27,8 @@ extern void test_e000_sets_valid_flag(void);
 extern void test_e000_preserves_other_fields(void);
 extern void test_e000_dlc_8_raw_fields_parsed(void);
 extern void test_e000_session2_idle_frame(void);
+extern void test_e000_session2_end_frame(void);
+extern void test_e000_dlc_2_too_short(void);
 extern void test_e000_dlc_6_counter2_deterministic_zero(void);
 
 // Charger komut frame'i — CAN ID 0x1806E5F4 (DOĞRULANDI)
@@ -89,6 +91,8 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_e000_preserves_other_fields);
     RUN_TEST(test_e000_dlc_8_raw_fields_parsed);
     RUN_TEST(test_e000_session2_idle_frame);
+    RUN_TEST(test_e000_session2_end_frame);
+    RUN_TEST(test_e000_dlc_2_too_short);
     RUN_TEST(test_e000_dlc_6_counter2_deterministic_zero);
 
     // Charger komut frame'i — CAN ID 0x1806E5F4 (DOĞRULANDI)

@@ -149,6 +149,43 @@ void test_e000_session2_idle_frame(void) {
     TEST_ASSERT_EQUAL_INT32(0, out.TEL_bmsCurrentCentiMa);
 }
 
+void test_e000_session2_end_frame(void) {
+    // Sniffer Oturum 2 oturum-sonu frame'i: FF FE 03 16 0F 5B 09 6D
+    // packV = 0x0316 = 790 deciV (79.0 V) — decode kuralı aynı oturum içinde
+    // ikinci bir örnekle de tutarlı.
+    // rawCurrent = 0xFFFE = -2 (HAM — ölçek uygulanmaz)
+    twai_message_t m{};
+    m.identifier = 0x0000E000;
+    m.data_length_code = 8;
+    m.data[0] = 0xFF;
+    m.data[1] = 0xFE;
+    m.data[2] = 0x03;
+    m.data[3] = 0x16;
+    m.data[4] = 0x0F;
+    m.data[5] = 0x5B;
+    m.data[6] = 0x09;
+    m.data[7] = 0x6D;
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_UINT16(790, out.TEL_bmsPackVoltageDeciV);
+    TEST_ASSERT_EQUAL_INT16(-2, out.TEL_bmsE000RawCurrent);
+    TEST_ASSERT_EQUAL_UINT16(0x0F5B, out.TEL_bmsE000RawCounter1);
+    TEST_ASSERT_EQUAL_UINT16(0x096D, out.TEL_bmsE000RawCounter2);
+}
+
+void test_e000_dlc_2_too_short(void) {
+    // DLC = 2: packV byte'ları (byte[2:3]) frame'de yok → false, alan yazılmaz
+    twai_message_t m{};
+    m.identifier = 0x0000E000;
+    m.data_length_code = 2;
+    m.data[0] = 0xFF;
+    m.data[1] = 0xFF;
+    TelemetryData out{};
+    TEST_ASSERT_FALSE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_UINT16(0, out.TEL_bmsPackVoltageDeciV);
+    TEST_ASSERT_FALSE(out.TEL_bmsDataValid);
+}
+
 void test_e000_dlc_6_counter2_deterministic_zero(void) {
     // DLC 6 sözleşmesi korunur: byte[6:7] okunamaz, counter2 = 0 yazılır.
     twai_message_t m = makeE000Msg(6, 0xFF, 0xFE, 0x03, 0x16, 0x0F, 0x5B);
