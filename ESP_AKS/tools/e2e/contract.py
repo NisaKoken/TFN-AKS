@@ -152,7 +152,7 @@ REMOVED_COMMAND_BYTES = [0xA1, 0xA2, 0xA3, 0xA4]
 LORA_TX_PERIOD_MS = 200          # 5 Hz telemetry uplink tick periyodu
 OFFLINE_SAMPLE_PERIOD_MS = 1000  # kesinti sirasi buffer ornekleme periyodu (1 Hz)
 OB_CAPACITY = 75                 # offline buffer kapasitesi (60 sn x 1 Hz + %25 marj)
-REPLAY_BURST_PER_TICK = 3        # link-up sonrasi tik basina en fazla replay
+REPLAY_BURST_PER_TICK = 1        # link-up sonrasi tik basina en fazla replay
 BOOT_LINK_GRACE_MS = 5000        # boot'tan itibaren ilk heartbeat icin tanina sure
 LINK_TIMEOUT_MS = 3000           # 1 Hz heartbeat icin 3x marj
 

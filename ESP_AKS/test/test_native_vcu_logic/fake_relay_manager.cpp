@@ -5,11 +5,13 @@
 
 unsigned g_fake_relay_allOn_count = 0;
 unsigned g_fake_relay_allOff_count = 0;
+unsigned g_fake_relay_allOff_silent_count = 0;
 unsigned g_fake_relay_setRelay_count = 0;
 
 void fake_relay_reset(void) {
     g_fake_relay_allOn_count = 0;
     g_fake_relay_allOff_count = 0;
+    g_fake_relay_allOff_silent_count = 0;
     g_fake_relay_setRelay_count = 0;
 }
 
@@ -39,9 +41,12 @@ void RelayManager::allOn() {
     ++g_fake_relay_allOn_count;
 }
 
-void RelayManager::allOff() {
+void RelayManager::allOff(bool silent) {
     s_relayState = 0;
     ++g_fake_relay_allOff_count;
+    if (silent) {
+        ++g_fake_relay_allOff_silent_count;
+    }
 }
 
 bool RelayManager::getRelayState(uint8_t channel) const {

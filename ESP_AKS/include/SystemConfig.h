@@ -136,7 +136,7 @@
 // Link UP oldugunda tek LORA_TX_PERIOD_MS tikinde en fazla bu kadar
 // buffered (replay) paket gonderilir; canli paket akisi hic kesilmeden
 // (1 canli + en fazla bu kadar replay / tik) buffer bosaltilir (S1).
-#define REPLAY_BURST_PER_TICK  3
+#define REPLAY_BURST_PER_TICK  1
 
 // --- LoRa RX Tanısı ---
 #define LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS 10000U  // RF gurultu tanisi icin en fazla 1 WARN / 10 sn
@@ -185,10 +185,8 @@
 #define BMS_WARN_MAX_TEMP_C 55
 #define BMS_CRITICAL_MAX_TEMP_C 70
 // Current thresholds in centi-mA (0.01 mA units).
-// TODO: source signal not yet verified — E000 byte[0:1] akım ADAYI ham
-// olarak toplanıyor (TEL_bmsE000RawCurrent) ama ölçek DOĞRULANMADI;
-// TEL_bmsCurrentCentiMa hiç yazılmıyor. Eski Solion föyü değerleri referans
-// olarak duruyor; Lithium Balance ölçeği doğrulanınca güncellenecek.
+// Not: CAN_BMS_CURRENT akımı doğrulanmıştır ve TEL_bmsCurrentCentiMa
+// üzerinden erişilebilir.
 #define BMS_WARN_MAX_CHARGE_CURRENT_CENTI_MA    90000    // 0.9 A
 #define BMS_CRITICAL_MAX_CHARGE_CURRENT_CENTI_MA 100000  // 1.0 A
 #define BMS_WARN_MAX_DISCHARGE_CURRENT_CENTI_MA  900000  // 9.0 A

@@ -2,6 +2,8 @@
 
 #include <cstdio>
 
+#include "BmsAlgo.h"  // BMS_SOC_EMPTY_MV / BMS_SOC_FULL_MV — tek kaynak
+
 // Saf C++; snprintf dışında bağımlılık yok. UART çağrısı YAPMAZ.
 
 namespace {
@@ -28,46 +30,70 @@ void emitIndexedNumeric(BmsNextionEmit emit, void* ctx, const char* comp,
 }
 
 // Hücre gerilimini (mV) progress bar doluluğuna (0..100) çevirir. Aralık
-// 3000..4200 mV; dışı 0/100'e clamp'lenir.
+// BMS_SOC_EMPTY_MV..BMS_SOC_FULL_MV (BmsAlgo.h, tek kaynak — LiFePO4 spec
+// 2.50-3.65 V/hücre); dışı 0/100'e clamp'lenir.
 uint8_t cellBarFill(uint16_t mv) {
-    constexpr uint16_t kBarEmptyMv = 3000;
-    constexpr uint16_t kBarFullMv = 4200;
-    if (mv <= kBarEmptyMv) return 0;
-    if (mv >= kBarFullMv) return 100;
+    if (mv <= BMS_SOC_EMPTY_MV) return 0;
+    if (mv >= BMS_SOC_FULL_MV) return 100;
     return static_cast<uint8_t>(
-        (static_cast<uint32_t>(mv - kBarEmptyMv) * 100u) /
-        (kBarFullMv - kBarEmptyMv));
+        (static_cast<uint32_t>(mv - BMS_SOC_EMPTY_MV) * 100u) /
+        (BMS_SOC_FULL_MV - BMS_SOC_EMPTY_MV));
 }
 
 }  // namespace
 
 void buildBmsNextionCommands(const BmsComputed& comp, const BmsPackData& raw,
-                             BmsNextionEmit emit, void* ctx) {
+                             BmsNextionEmit emit, void* ctx,
+                             BmsNextionCache& cache, bool forceFullRefresh, bool updateCells) {
     if (emit == nullptr) return;
 
-    // Hücre gerilimleri: cell0..cell23
-    for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
-        emitIndexedNumeric(emit, ctx, "cell", i,
-                           static_cast<int32_t>(raw.cellVoltageMv[i]));
+    // BANDWIDTH BUDGET (9600 baud ≈ 960 B/s):
+    // 75 fields * ~15 B/cmd = ~1125 B/refresh.
+    // Full refresh takes >1s on UART, blocking the HMI task.
+    // By using a change-cache, we only send fields that changed.
+    // We also restrict 24-cell evaluations to 1 Hz via updateCells.
+
+    if (updateCells || forceFullRefresh) {
+        // Hücre gerilimleri: cell0..cell23
+        for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
+            if (forceFullRefresh || raw.cellVoltageMv[i] != cache.cellVoltageMv[i]) {
+                emitIndexedNumeric(emit, ctx, "cell", i, static_cast<int32_t>(raw.cellVoltageMv[i]));
+                cache.cellVoltageMv[i] = raw.cellVoltageMv[i];
+            }
+        }
+
+        // Hücre bar doluluğu: j0..j23 (0..100) — number cell0.. ile aynı veriden.
+        for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
+            uint8_t fill = cellBarFill(raw.cellVoltageMv[i]);
+            if (forceFullRefresh || fill != cache.cellBarFill[i]) {
+                emitIndexedNumeric(emit, ctx, "j", i, fill);
+                cache.cellBarFill[i] = fill;
+            }
+        }
+
+        // Dengeleme bayrakları: bal0..bal23  (0/1)
+        for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
+            uint8_t bal = comp.balanceFlag[i] ? 1 : 0;
+            if (forceFullRefresh || bal != cache.balanceFlag[i]) {
+                emitIndexedNumeric(emit, ctx, "bal", i, bal);
+                cache.balanceFlag[i] = bal;
+            }
+        }
     }
 
-    // Hücre bar doluluğu: j0..j23 (0..100) — number cell0.. ile aynı veriden.
-    for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
-        emitIndexedNumeric(emit, ctx, "j", i, cellBarFill(raw.cellVoltageMv[i]));
+    // Özet alanlar (uç hücre gerilimleri).
+    if (forceFullRefresh || comp.cellMaxMv != cache.cellMaxMv) {
+        emitNumeric(emit, ctx, "cellmax", comp.cellMaxMv);
+        cache.cellMaxMv = comp.cellMaxMv;
     }
-
-    // Dengeleme bayrakları: bal0..bal23  (0/1)
-    for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
-        emitIndexedNumeric(emit, ctx, "bal", i, comp.balanceFlag[i] ? 1 : 0);
+    if (forceFullRefresh || comp.cellMinMv != cache.cellMinMv) {
+        emitNumeric(emit, ctx, "cellmin", comp.cellMinMv);
+        cache.cellMinMv = comp.cellMinMv;
     }
-
-    // Özet alanlar (uç hücre gerilimleri). delta/soc/bmspackv/tmax/tmin demo'dan
-    // ÇIKARILDI: bunlar ana ekranda gerçek veriyle (bat/packv/temp) zaten var ya
-    // da demoya özel ve gereksiz. computePack bu değerleri hesaplamaya devam eder,
-    // yalnızca ekrana gönderilmez.
-    emitNumeric(emit, ctx, "cellmax", comp.cellMaxMv);
-    emitNumeric(emit, ctx, "cellmin", comp.cellMinMv);
 
     // Uyarı: sayısal seviye (renk/animasyon için)
-    emitNumeric(emit, ctx, "warn", comp.warningLevel);
+    if (forceFullRefresh || comp.warningLevel != cache.warningLevel) {
+        emitNumeric(emit, ctx, "warn", comp.warningLevel);
+        cache.warningLevel = comp.warningLevel;
+    }
 }

@@ -139,7 +139,7 @@ void processExtFrame(const Frame& f, bool sessionAsserts, Stats& st) {
             TelemetryData out{};
             if (!CanParse::parseLbBmsE000(f.msg, out)) {
                 st.addViolation(std::string(where) +
-                                ": parseLbBmsE000 false dondu (DLC<6)");
+                                ": parseLbBmsE000 false dondu (DLC<8)");
                 return;
             }
             if (!sessionAsserts) return;
@@ -150,11 +150,11 @@ void processExtFrame(const Frame& f, bool sessionAsserts, Stats& st) {
             if (f.msg.data[2] != 0x03 || f.msg.data[3] != 0x16)
                 st.addViolation(std::string(where) +
                                 ": E000 byte[2:3] != 0x0316");
-            const int16_t cur = out.TEL_bmsE000RawCurrent;
-            if (cur != -1 && cur != -2)
-                st.addViolation(std::string(where) + ": E000 ham akim " +
+            const int32_t cur = out.TEL_bmsCurrentCentiMa;
+            if (cur != -10 && cur != -20)
+                st.addViolation(std::string(where) + ": E000 akim " +
                                 std::to_string(cur) +
-                                ", beklenen {-1,-2} (idle)");
+                                ", beklenen {-10,-20} centiMa (idle)");
             break;
         }
         case 0x1806E5F4: {

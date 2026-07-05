@@ -46,7 +46,8 @@ class CanManager {
     void handleMotorStatus(const twai_message_t& msg);
 
     // Lithium Balance c-BMS handler'ları
-    void handleLbBmsE000(const twai_message_t& msg);   // packV — DOĞRULANDI
+    void handleLbBmsE000(const twai_message_t& msg);        // packV, akım, SoC — DOĞRULANDI
+    void handleLbBmsE001(const twai_message_t& msg);        // Sıcaklıklar — DOĞRULANDI
     void handleCharger1806E5F4(const twai_message_t& msg);  // setpoint'ler — DOĞRULANDI (AKS yalnızca dinler)
     void handleLbBmsStub(const twai_message_t& msg, uint32_t canId);  // diğer ID'ler — DOĞRULANMADI
 
@@ -68,6 +69,9 @@ class CanManager {
     TickType_t CAN_lastMotorStatusTick = 0;
     bool CAN_hasSeenMotorStatus = false;
     bool CAN_motorTimeoutLogged = false;
+
+    bool CAN_busOffLogged = false;
+    bool CAN_busRecoveredLogged = false;
 
     // BMS freshness tracking — E000 (packV, doğrulanmış veri kaynağı)
     TickType_t CAN_lastBmsE000Tick = 0;

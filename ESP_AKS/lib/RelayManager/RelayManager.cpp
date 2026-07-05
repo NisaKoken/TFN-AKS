@@ -90,12 +90,14 @@ void RelayManager::allOn() {
     ESP_LOGI(TAG, "All %d contactors closed", RELAY_TOTAL_CHANNELS);
 }
 
-void RelayManager::allOff() {
+void RelayManager::allOff(bool silent) {
     s_relayState = 0;
     // Active-low: all relays OFF = all pins HIGH
     writeRegister(MCP23S17_OLATA, 0xFF);
     writeRegister(MCP23S17_OLATB, 0xFF);
-    ESP_LOGW(TAG, "All relays de-energized");
+    if (!silent) {
+        ESP_LOGW(TAG, "All relays de-energized");
+    }
 }
 
 bool RelayManager::getRelayState(uint8_t channel) const {

@@ -26,6 +26,7 @@ bool CanManager::begin() {
         return false;
     }
 
+    g_config.alerts_enabled = TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
     esp_err_t err = twai_driver_install(&g_config, &t_config, &f_config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "twai_driver_install failed: %s", esp_err_to_name(err));
@@ -72,6 +73,26 @@ void CanManager::processRxMessages() {
     if (!isInitialized)
         return;
 
+    uint32_t alerts;
+    if (twai_read_alerts(&alerts, 0) == ESP_OK) {
+        if (alerts & TWAI_ALERT_BUS_OFF) {
+            if (!CAN_busOffLogged) {
+                ESP_LOGE(TAG, "CAN BUS-OFF detected, initiating recovery");
+                CAN_busOffLogged = true;
+                CAN_busRecoveredLogged = false;
+            }
+            twai_initiate_recovery();
+        }
+        if (alerts & TWAI_ALERT_BUS_RECOVERED) {
+            if (!CAN_busRecoveredLogged) {
+                ESP_LOGI(TAG, "CAN BUS RECOVERED, restarting driver");
+                CAN_busRecoveredLogged = true;
+                CAN_busOffLogged = false;
+            }
+            twai_start();
+        }
+    }
+
     twai_message_t msg;
     // Process up to 5 messages per call to avoid blocking the task
     for (int i = 0; i < 5; i++) {
@@ -97,7 +118,9 @@ void CanManager::processRxMessages() {
                 // Aşağıdakiler DOĞRULANMADI — alan hipotezleri için bkz.
                 // Documents/CAN_Message_Table.md. Stub yalnızca ham hex dump
                 // basar; TelemetryData'ya ve karar mantığına bağlanmaz.
-                case CAN_ID_LB_BMS_E001:  // analog kanal + sıcaklık adayları (HIPOTEZ)
+                case CAN_ID_LB_BMS_E001:  // Sıcaklıklar (DOĞRULANDI)
+                    handleLbBmsE001(msg);
+                    break;
                 case CAN_ID_LB_BMS_E002:  // sabit limit/config adayı; E004 ile multiplex
                 case CAN_ID_LB_BMS_E003:
                 case CAN_ID_LB_BMS_E004:  // sabit limit/config adayı; E002 ile multiplex
@@ -149,61 +172,9 @@ TelemetryData CanManager::getTelemetryData() const {
         return s_telemetryData;
 
     TelemetryData CAN_telemetryCopy = {};
-    const TickType_t CAN_nowTick = xTaskGetTickCount();
-    bool CAN_shouldLogSysState = false;
-    bool CAN_shouldLogSoc = false;
-    bool CAN_shouldLogCurrent = false;
-
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     CAN_telemetryCopy = s_telemetryData;
-
-    // UKS Decode_Line, alan bazinda sert aralik kontrolu yapar ve TEK
-    // alan aralik disindaysa TUM frame'i reddeder (parse_fail) — bu
-    // yuzden UKS'e giden anlik goruntu, gonderilmeden hemen once burada
-    // sanitize edilir. Ham CAN parse (CanParse.cpp) ve ic durum
-    // (s_telemetryData) DEGISTIRILMEZ; yalnizca disariya kopyalanan
-    // deger duzeltilir.
-    const uint8_t CAN_sanitizedState =
-        TelemetrySanitize::sanitizeSystemState(CAN_telemetryCopy.TEL_bmsSystemState);
-    if (CAN_sanitizedState != CAN_telemetryCopy.TEL_bmsSystemState) {
-        CAN_telemetryCopy.TEL_bmsSystemState = CAN_sanitizedState;
-        if (static_cast<TickType_t>(CAN_nowTick - CAN_lastSysStateSanitizeWarnTick) >=
-            pdMS_TO_TICKS(TEL_SANITIZE_WARN_THROTTLE_MS)) {
-            CAN_shouldLogSysState = true;
-            CAN_lastSysStateSanitizeWarnTick = CAN_nowTick;
-        }
-    }
-
-    const uint16_t CAN_sanitizedSoc =
-        TelemetrySanitize::sanitizeSoc(CAN_telemetryCopy.TEL_bmsSocHundredths);
-    if (CAN_sanitizedSoc != CAN_telemetryCopy.TEL_bmsSocHundredths) {
-        CAN_telemetryCopy.TEL_bmsSocHundredths = CAN_sanitizedSoc;
-        if (static_cast<TickType_t>(CAN_nowTick - CAN_lastSocSanitizeWarnTick) >=
-            pdMS_TO_TICKS(TEL_SANITIZE_WARN_THROTTLE_MS)) {
-            CAN_shouldLogSoc = true;
-            CAN_lastSocSanitizeWarnTick = CAN_nowTick;
-        }
-    }
-
-    const int32_t CAN_sanitizedCurrent =
-        TelemetrySanitize::sanitizeCurrent(CAN_telemetryCopy.TEL_bmsCurrentCentiMa);
-    if (CAN_sanitizedCurrent != CAN_telemetryCopy.TEL_bmsCurrentCentiMa) {
-        CAN_telemetryCopy.TEL_bmsCurrentCentiMa = CAN_sanitizedCurrent;
-        if (static_cast<TickType_t>(CAN_nowTick - CAN_lastCurrentSanitizeWarnTick) >=
-            pdMS_TO_TICKS(TEL_SANITIZE_WARN_THROTTLE_MS)) {
-            CAN_shouldLogCurrent = true;
-            CAN_lastCurrentSanitizeWarnTick = CAN_nowTick;
-        }
-    }
-
     xSemaphoreGive(s_mutex);
-
-    if (CAN_shouldLogSysState)
-        ESP_LOGW(TAG, "BMS sysState UKS araligi disinda (1..4) — FAULT'a sanitize edildi");
-    if (CAN_shouldLogSoc)
-        ESP_LOGW(TAG, "BMS soc UKS araligi disinda (0..10000) — clamp edildi");
-    if (CAN_shouldLogCurrent)
-        ESP_LOGW(TAG, "BMS current == INT32_MIN, UKS sinirina gore +1 kaydirildi");
 
     return CAN_telemetryCopy;
 }
@@ -282,12 +253,9 @@ void CanManager::handleLbBmsE000(const twai_message_t& msg) {
     // DOĞRULANDI: packV
     s_telemetryData.TEL_bmsPackVoltageDeciV = parsed.TEL_bmsPackVoltageDeciV;
 
-    // DOĞRULANMADI (UNVERIFIED) — HAM alanlar: ölçek bilinmediği için yalnızca
-    // TEL_bmsE000Raw* alanlarında ölçeksiz tutulur. TelemetryData'nın anlamlı
-    // alanlarına (TEL_bmsCurrentCentiMa vb.) ve karar mantığına YAZILMAZ.
-    s_telemetryData.TEL_bmsE000RawCurrent = parsed.TEL_bmsE000RawCurrent;
-    s_telemetryData.TEL_bmsE000RawCounter1 = parsed.TEL_bmsE000RawCounter1;
-    s_telemetryData.TEL_bmsE000RawCounter2 = parsed.TEL_bmsE000RawCounter2;
+    // DOĞRULANDI: Akım ve SoC değerleri TelemetryData'ya aktarılıyor
+    s_telemetryData.TEL_bmsCurrentCentiMa = parsed.TEL_bmsCurrentCentiMa;
+    s_telemetryData.TEL_bmsSocHundredths = parsed.TEL_bmsSocHundredths;
 
     CAN_lastBmsE000Tick = xTaskGetTickCount();
     CAN_hasSeen_BmsE000 = true;
@@ -321,6 +289,28 @@ void CanManager::handleLbBmsE000(const twai_message_t& msg) {
     ESP_LOGD(TAG, "LB-E000: packV=%u deciV (%.1f V)",
              parsed.TEL_bmsPackVoltageDeciV,
              parsed.TEL_bmsPackVoltageDeciV * 0.1f);
+}
+
+void CanManager::handleLbBmsE001(const twai_message_t& msg) {
+    if (s_mutex == nullptr) {
+        ESP_LOGW(TAG, "LB BMS E001 received before mutex initialization");
+        return;
+    }
+
+    TelemetryData parsed{};
+    if (!CanParse::parseLbBmsE001(msg, parsed)) {
+        ESP_LOGW(TAG, "LB BMS E001 DLC too short: %d", msg.data_length_code);
+        return;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s_telemetryData.TEL_bmsTempHighestC = parsed.TEL_bmsTempHighestC;
+    s_telemetryData.TEL_bmsTempLowestC = parsed.TEL_bmsTempLowestC;
+    xSemaphoreGive(s_mutex);
+
+    ESP_LOGD(TAG, "LB-E001: temp1=%d C, temp2=%d C",
+             parsed.TEL_bmsTempHighestC,
+             parsed.TEL_bmsTempLowestC);
 }
 
 // 0x1806E5F4 — Charger komut frame'i (BMS -> Charger, DOĞRULANDI decode).

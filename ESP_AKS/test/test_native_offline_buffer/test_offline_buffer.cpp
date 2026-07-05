@@ -299,10 +299,11 @@ void test_60s_outage_simulation_stays_within_capacity(void) {
 
 // ---------------------------------------------------------------------------
 // Replay throttle simülasyonu (S1): 60 buffered paket, her "tik"te en fazla
-// REPLAY_BURST_PER_TICK(=3) paket + 1 canlı gönderilir. Buffer'ın
-// boşalması için gereken tik sayısı ceil(60/3)=20 olmalı; 20 tik ×
-// LORA_TX_PERIOD_MS(200ms) = 4000 ms (<= ~5 sn hedefi). Canlı akış (ayrı
-// sayaç) hiç kesilmeden her tikte 1 artmalı.
+// REPLAY_BURST_PER_TICK(=1) paket + 1 canlı gönderilir. Buffer'ın
+// boşalması için gereken tik sayısı 60 olmalı; 60 tik ×
+// LORA_TX_PERIOD_MS(200ms) = 12000 ms. Canlı akış (ayrı
+// sayaç) hiç kesilmeden her tikte 1 artmalı. Per-tick byte bütçesi (192 byte)
+// aşılmadığı teyit edilir (1 canlı + 1 replay = 180 byte).
 // ---------------------------------------------------------------------------
 void test_replay_throttle_drains_60_packets_within_expected_ticks(void) {
     ob_reset();
@@ -314,7 +315,7 @@ void test_replay_throttle_drains_60_packets_within_expected_ticks(void) {
     }
     TEST_ASSERT_EQUAL_INT(60, ob_count());
 
-    const int burstPerTick = 3;
+    const int burstPerTick = 1;
     int ticks = 0;
     int liveSentCount = 0;
     uint16_t nextExpectedRpm = 0;
@@ -336,7 +337,8 @@ void test_replay_throttle_drains_60_packets_within_expected_ticks(void) {
         liveSentCount++;
     }
 
-    TEST_ASSERT_EQUAL_INT(20, ticks);           // ceil(60/3)
-    TEST_ASSERT_EQUAL_INT(20, liveSentCount);   // canlı akış kesilmedi
-    TEST_ASSERT_TRUE((ticks * 200) <= 5000);    // ~5 sn hedefi
+    TEST_ASSERT_EQUAL_INT(60, ticks);           // ceil(60/1)
+    TEST_ASSERT_EQUAL_INT(60, liveSentCount);   // canlı akış kesilmedi
+    TEST_ASSERT_TRUE((ticks * 200) <= 15000);   // ~12 sn bekleme süresi dahilinde
+
 }
