@@ -341,12 +341,28 @@ def test_aks_loop_sim_post_live_ms_is_derived_from_contract(aks_root):
 
     assert re.search(r"post_live_ms\s*:\s*int\s*\|\s*None\s*=\s*None", src), (
         "run_outage_simulation'in post_live_ms parametresi artik "
-        "'int | None = None' imzasini tasimiyor gorunuyor"
+        "'int | None = None' imzasini tasimiyor gorunuyor (sabit bir sayiya "
+        "geri donmus olabilir) — bu, REPLAY_BURST_PER_TICK degistiginde "
+        "post_live_ms'in yeniden bayatlayip 417a665'teki gibi buffer'in "
+        "yarisinin sessizce replay edilmeden kalmasina karsi korur; eger "
+        "parametre bilincli olarak yeniden adlandirildiysa/imzasi degistiyse "
+        "bu regex'i de AYNI COMMIT'TE yeni imzaya gore guncelleyin"
     )
     assert re.search(r"post_live_ms\s+is\s+None", src), (
-        "post_live_ms icin None-ise-dinamik-hesapla dali bulunamadi"
+        "post_live_ms icin 'None ise dinamik hesapla' dali bulunamadi — "
+        "bu dal olmadan fonksiyon cagirani post_live_ms'i hep sabit/varsayilan "
+        "degerle calistirir ve REPLAY_BURST_PER_TICK degistiginde outage "
+        "testi sessizce yetersiz sureyle FAIL eder (417a665 kaymasi); eger "
+        "hesaplama farkli bir kosul ifadesiyle (orn. 'if not post_live_ms') "
+        "yeniden yazildiysa bu regex'i yeni ifadeye gore guncelleyin"
     )
     assert "contract.OFFLINE_SAMPLE_PERIOD_MS" in src and "contract.REPLAY_BURST_PER_TICK" in src, (
         "post_live_ms hesaplamasi artik contract.OFFLINE_SAMPLE_PERIOD_MS / "
-        "contract.REPLAY_BURST_PER_TICK sabitlerine dayanmiyor gorunuyor"
+        "contract.REPLAY_BURST_PER_TICK sabitlerine dayanmiyor gorunuyor — bu "
+        "sabitler yerine hard-code sayilar kullanilirsa REPLAY_BURST_PER_TICK "
+        "gelecekte tekrar degistiginde post_live_ms otomatik uyum saglamaz ve "
+        "417a665'teki sozlesme kaymasi baska bir sekilde geri gelir; eger "
+        "hesaplama mesru bir sekilde contract'tan farkli/ek sabitler "
+        "kullanacak sekilde genisletildiyse bu test'i de o sabitleri "
+        "kontrol edecek sekilde guncelleyin"
     )
