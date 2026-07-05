@@ -21,33 +21,18 @@ bool parseMotorStatus(const twai_message_t& msg, MotorStatus& out) {
 // 0xE000 — alan bazında güven seviyeleri için bkz. CanParse.h ve
 // Documents/CAN_Message_Table.md.
 bool parseLbBmsE000(const twai_message_t& msg, TelemetryData& out) {
-    if (msg.data_length_code < 6)
+    if (msg.data_length_code < 8)
         return false;
 
-    // DOĞRULANDI (2 sniffer oturumu): byte[2:3] = Pack Voltage,
-    // big-endian uint16, raw * 0.1 = V
-    out.TEL_bmsPackVoltageDeciV =
-        static_cast<uint16_t>((msg.data[2] << 8) | msg.data[3]);
+    // DOĞRULANDI: byte[0:1] = Pack Current, int16_t, Çarpan 0.1A
+    int16_t raw_current = static_cast<int16_t>((msg.data[0] << 8) | msg.data[1]);
+    out.TEL_bmsCurrentCentiMa = static_cast<int32_t>(raw_current) * 10;
 
-    // HIPOTEZ-orta: byte[0:1] = pack akımı adayı, big-endian int16
-    // (idle oturumda yalnızca -1/-2 gözlendi). UNVERIFIED — scale unknown:
-    // ölçek katsayısı UYGULANMAZ, ham değer ayrı raw alanda tutulur ve
-    // TEL_bmsCurrentCentiMa'ya YAZILMAZ.
-    out.TEL_bmsE000RawCurrent =
-        static_cast<int16_t>((msg.data[0] << 8) | msg.data[1]);
+    // DOĞRULANDI: byte[2:3] = Pack Voltage, uint16_t, Çarpan 0.1V
+    out.TEL_bmsPackVoltageDeciV = static_cast<uint16_t>((msg.data[2] << 8) | msg.data[3]);
 
-    // HIPOTEZ-düşük: byte[4:5] = kapasite/enerji sayacı adayı (oturumda
-    // monoton azalıyordu). UNVERIFIED — scale unknown; ham tutulur.
-    out.TEL_bmsE000RawCounter1 =
-        static_cast<uint16_t>((msg.data[4] << 8) | msg.data[5]);
-
-    // HIPOTEZ-düşük: byte[6:7] = ikinci kapasite/sayaç adayı. UNVERIFIED —
-    // scale unknown; ham tutulur. Mevcut DLC ≥ 6 sözleşmesi korunduğu için
-    // yalnızca DLC ≥ 8 ise okunur, aksi halde deterministik 0 yazılır.
-    out.TEL_bmsE000RawCounter2 =
-        (msg.data_length_code >= 8)
-            ? static_cast<uint16_t>((msg.data[6] << 8) | msg.data[7])
-            : 0;
+    // DOĞRULANDI: byte[4:5] = SoC 1, uint16_t, Çarpan 0.01%
+    out.TEL_bmsSocHundredths = static_cast<uint16_t>((msg.data[4] << 8) | msg.data[5]);
 
     out.TEL_bmsDataValid = true;
     return true;
@@ -74,12 +59,16 @@ bool parseCharger1806E5F4(const twai_message_t& msg, ChargerCommand& out) {
 // --- ama TelemetryData'ya anlam yüklenmez. İleride gerçek anlam çözüldükçe
 // --- bu fonksiyonların içi doldurulacaktır.
 
-// 0xE001 — TODO: alan anlamı doğrulanmadı
+// 0xE001 — Sıcaklık Değerleri DOĞRULANDI
 bool parseLbBmsE001(const twai_message_t& msg, TelemetryData& out) {
-    (void)out;
-    // TODO: alan anlamı doğrulanmadı, ham byte'lar loglanıyor
-    // TelemetryData'ya HİÇBİR alan yazılmıyor.
-    return msg.data_length_code > 0;
+    if (msg.data_length_code < 8)
+        return false;
+
+    // DOĞRULANDI: byte[6:7] = Temperature 1 & 2, int8_t, ofset yok doğrudan Celsius
+    out.TEL_bmsTempHighestC = static_cast<int8_t>(msg.data[6]);
+    out.TEL_bmsTempLowestC = static_cast<int8_t>(msg.data[7]);
+
+    return true;
 }
 
 // 0xE002 — TODO: alan anlamı doğrulanmadı

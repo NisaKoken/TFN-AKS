@@ -97,7 +97,9 @@ void CanManager::processRxMessages() {
                 // Aşağıdakiler DOĞRULANMADI — alan hipotezleri için bkz.
                 // Documents/CAN_Message_Table.md. Stub yalnızca ham hex dump
                 // basar; TelemetryData'ya ve karar mantığına bağlanmaz.
-                case CAN_ID_LB_BMS_E001:  // analog kanal + sıcaklık adayları (HIPOTEZ)
+                case CAN_ID_LB_BMS_E001:  // Sıcaklıklar (DOĞRULANDI)
+                    handleLbBmsE001(msg);
+                    break;
                 case CAN_ID_LB_BMS_E002:  // sabit limit/config adayı; E004 ile multiplex
                 case CAN_ID_LB_BMS_E003:
                 case CAN_ID_LB_BMS_E004:  // sabit limit/config adayı; E002 ile multiplex
@@ -282,12 +284,9 @@ void CanManager::handleLbBmsE000(const twai_message_t& msg) {
     // DOĞRULANDI: packV
     s_telemetryData.TEL_bmsPackVoltageDeciV = parsed.TEL_bmsPackVoltageDeciV;
 
-    // DOĞRULANMADI (UNVERIFIED) — HAM alanlar: ölçek bilinmediği için yalnızca
-    // TEL_bmsE000Raw* alanlarında ölçeksiz tutulur. TelemetryData'nın anlamlı
-    // alanlarına (TEL_bmsCurrentCentiMa vb.) ve karar mantığına YAZILMAZ.
-    s_telemetryData.TEL_bmsE000RawCurrent = parsed.TEL_bmsE000RawCurrent;
-    s_telemetryData.TEL_bmsE000RawCounter1 = parsed.TEL_bmsE000RawCounter1;
-    s_telemetryData.TEL_bmsE000RawCounter2 = parsed.TEL_bmsE000RawCounter2;
+    // DOĞRULANDI: Akım ve SoC değerleri TelemetryData'ya aktarılıyor
+    s_telemetryData.TEL_bmsCurrentCentiMa = parsed.TEL_bmsCurrentCentiMa;
+    s_telemetryData.TEL_bmsSocHundredths = parsed.TEL_bmsSocHundredths;
 
     CAN_lastBmsE000Tick = xTaskGetTickCount();
     CAN_hasSeen_BmsE000 = true;
@@ -321,6 +320,28 @@ void CanManager::handleLbBmsE000(const twai_message_t& msg) {
     ESP_LOGD(TAG, "LB-E000: packV=%u deciV (%.1f V)",
              parsed.TEL_bmsPackVoltageDeciV,
              parsed.TEL_bmsPackVoltageDeciV * 0.1f);
+}
+
+void CanManager::handleLbBmsE001(const twai_message_t& msg) {
+    if (s_mutex == nullptr) {
+        ESP_LOGW(TAG, "LB BMS E001 received before mutex initialization");
+        return;
+    }
+
+    TelemetryData parsed{};
+    if (!CanParse::parseLbBmsE001(msg, parsed)) {
+        ESP_LOGW(TAG, "LB BMS E001 DLC too short: %d", msg.data_length_code);
+        return;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s_telemetryData.TEL_bmsTempHighestC = parsed.TEL_bmsTempHighestC;
+    s_telemetryData.TEL_bmsTempLowestC = parsed.TEL_bmsTempLowestC;
+    xSemaphoreGive(s_mutex);
+
+    ESP_LOGD(TAG, "LB-E001: temp1=%d C, temp2=%d C",
+             parsed.TEL_bmsTempHighestC,
+             parsed.TEL_bmsTempLowestC);
 }
 
 // 0x1806E5F4 — Charger komut frame'i (BMS -> Charger, DOĞRULANDI decode).

@@ -55,19 +55,10 @@ struct TelemetryData {
     int8_t TEL_bmsTempLowestC;             // DOĞRULANMADI — kaynak ID bilinmiyor
     uint8_t TEL_bmsSystemState;            // DOĞRULANMADI — kaynak ID bilinmiyor
 
-    // Lithium Balance c-BMS — CAN ID 0xE000 byte[2:3] (DOĞRULANDI)
-    uint16_t TEL_bmsPackVoltageDeciV;  // raw * 0.1 = V — DOĞRULANDI
-    int32_t TEL_bmsCurrentCentiMa;     // DOĞRULANMADI — kaynak ID bilinmiyor
-    uint16_t TEL_bmsSocHundredths;     // DOĞRULANMADI — kaynak ID bilinmiyor
-
-    // Lithium Balance c-BMS — CAN ID 0xE000 HAM alanlar (UNVERIFIED).
-    // Sniffer Oturum 2 gözlemine dayalı hipotezler; ölçek DOĞRULANMADI.
-    // Ham değerler olduğu gibi tutulur, ölçek katsayısı UYGULANMAZ.
-    // Tüketici kodlar (HMI/uplink/VcuLogic) doğrulama tamamlanana kadar
-    // bu alanları KULLANMAMALIDIR (bkz. Documents/CAN_Message_Table.md).
-    int16_t TEL_bmsE000RawCurrent;    // byte[0:1] — HIPOTEZ-orta: pack akımı adayı; UNVERIFIED — scale unknown
-    uint16_t TEL_bmsE000RawCounter1;  // byte[4:5] — HIPOTEZ-düşük: kapasite/sayaç adayı; UNVERIFIED — scale unknown
-    uint16_t TEL_bmsE000RawCounter2;  // byte[6:7] — HIPOTEZ-düşük: kapasite/sayaç adayı; UNVERIFIED — scale unknown (DLC<8 ise 0)
+    // Lithium Balance c-BMS — CAN ID 0xE000 (DOĞRULANDI)
+    uint16_t TEL_bmsPackVoltageDeciV;  // byte[2:3], raw * 0.1 = V — DOĞRULANDI
+    int32_t TEL_bmsCurrentCentiMa;     // byte[0:1], raw * 10 = CentiMa (0.01A) — DOĞRULANDI
+    uint16_t TEL_bmsSocHundredths;     // byte[4:5], raw = 0.01% — DOĞRULANDI
 
     bool TEL_bmsDataValid;
     // Post-reception E000 freshness kaybı (krş. TEL_motorTimeoutActive).
