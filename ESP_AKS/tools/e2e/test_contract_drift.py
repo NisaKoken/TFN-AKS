@@ -321,3 +321,32 @@ def test_lb_bms_field_coverage_is_tracked(aks_root):
         f"Hala stub olan LB BMS ID'leri: {still_stubbed} — hedef: tumu "
         "gercek parse kazanmis olmali (bos liste)."
     )
+
+
+# ===========================================================================
+# 3.7 — aks_loop_sim.py outage sim post_live_ms bekcisi
+# ===========================================================================
+
+
+def test_aks_loop_sim_post_live_ms_is_derived_from_contract(aks_root):
+    """417a665, REPLAY_BURST_PER_TICK'i 3'ten 1'e dusurdukten sonra
+    aks_loop_sim.run_outage_simulation'in sabit post_live_ms=6000 varsayilani
+    bayatlamis, 60 paketlik buffer'in yarisi replay edilmeden kalmisti (bkz.
+    test_outage_simulation.py'nin FAIL etmesi). Duzeltme: post_live_ms=None
+    varsayilan olsun, deger contract sabitlerinden turetilsin. Bu bekci,
+    fonksiyonun tekrar sabit bir sayiya donmedigini kontrol eder — aksi
+    halde REPLAY_BURST_PER_TICK bir daha degisirse ayni sozlesme kaymasi
+    sessizce geri gelir."""
+    src = strip_py_comments(read(aks_root / "tools/e2e/aks_loop_sim.py"))
+
+    assert re.search(r"post_live_ms\s*:\s*int\s*\|\s*None\s*=\s*None", src), (
+        "run_outage_simulation'in post_live_ms parametresi artik "
+        "'int | None = None' imzasini tasimiyor gorunuyor"
+    )
+    assert re.search(r"post_live_ms\s+is\s+None", src), (
+        "post_live_ms icin None-ise-dinamik-hesapla dali bulunamadi"
+    )
+    assert "contract.OFFLINE_SAMPLE_PERIOD_MS" in src and "contract.REPLAY_BURST_PER_TICK" in src, (
+        "post_live_ms hesaplamasi artik contract.OFFLINE_SAMPLE_PERIOD_MS / "
+        "contract.REPLAY_BURST_PER_TICK sabitlerine dayanmiyor gorunuyor"
+    )
