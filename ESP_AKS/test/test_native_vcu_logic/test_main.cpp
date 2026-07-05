@@ -63,6 +63,7 @@ extern void test_reset_interlock_unverified_current_does_not_block(void);
 extern void test_reset_interlock_motor_timeout_in_fault_blocks(void);
 extern void test_reset_interlock_bms_timeout_in_fault_blocks(void);
 extern void test_reset_interlock_warning_level_passes(void);
+extern void test_reset_interlock_unverified_bms_system_state_does_not_block(void);
 
 // Faz 2 — state machine geçişleri
 extern void test_init_transitions_to_idle_and_calls_allOff(void);
@@ -80,6 +81,7 @@ extern void test_fault_stays_on_reset_when_motor_error(void);
 extern void test_idle_reset_is_noop(void);
 extern void test_idle_with_motor_timeout_stays_idle(void);
 extern void test_emergency_stop_opens_contactors_after_delay(void);
+extern void test_idle_with_unverified_bms_system_state_stays_idle(void);
 
 // Faz 0 sanity
 static void test_smoke_arithmetic(void) {
@@ -152,6 +154,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_reset_interlock_motor_timeout_in_fault_blocks);
     RUN_TEST(test_reset_interlock_bms_timeout_in_fault_blocks);
     RUN_TEST(test_reset_interlock_warning_level_passes);
+    RUN_TEST(test_reset_interlock_unverified_bms_system_state_does_not_block);
 
     // Faz 2 — state machine
     RUN_TEST(test_init_transitions_to_idle_and_calls_allOff);
@@ -169,6 +172,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_idle_reset_is_noop);
     RUN_TEST(test_idle_with_motor_timeout_stays_idle);
     RUN_TEST(test_emergency_stop_opens_contactors_after_delay);
+    RUN_TEST(test_idle_with_unverified_bms_system_state_stays_idle);
 
     return UNITY_END();
 }

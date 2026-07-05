@@ -70,6 +70,9 @@ class CanManager {
     bool CAN_hasSeenMotorStatus = false;
     bool CAN_motorTimeoutLogged = false;
 
+    bool CAN_busOffLogged = false;
+    bool CAN_busRecoveredLogged = false;
+
     // BMS freshness tracking — E000 (packV, doğrulanmış veri kaynağı)
     TickType_t CAN_lastBmsE000Tick = 0;
     bool CAN_hasSeen_BmsE000 = false;

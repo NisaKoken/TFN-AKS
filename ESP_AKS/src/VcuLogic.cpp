@@ -16,7 +16,7 @@ namespace VcuLogic {
 // ---------------------------------------------------------------------------
 // Internal state
 // ---------------------------------------------------------------------------
-static VcuState s_state = VcuState::INIT;
+static std::atomic<VcuState> s_state{VcuState::INIT};
 static QueueHandle_t s_eventQueue = nullptr;
 static uint32_t s_stateTimer = 0;
 static TelemetryData s_TEL_latestData = {};
@@ -25,6 +25,11 @@ static SemaphoreHandle_t s_TEL_dataMutex = nullptr;
 // E-STOP bypass: set atomically in postEvent so queue saturation
 // cannot swallow an emergency stop command.
 static std::atomic<bool> s_eStopPending{false};
+
+static bool s_relaysOpenedInEstop = false;
+static bool s_relaysOpenedInFault = false;
+static uint32_t s_lastEstopLogMs = 0;
+static uint32_t s_lastFaultLogMs = 0;
 
 // ---------------------------------------------------------------------------
 // Forward declarations
@@ -68,7 +73,7 @@ void run() {
     s_stateTimer += TASK_PERIOD_MS;
 
     if (s_eStopPending.exchange(false, std::memory_order_acquire)) {
-        if (s_state != VcuState::EMERGENCY_STOP) {
+        if (s_state.load(std::memory_order_relaxed) != VcuState::EMERGENCY_STOP) {
             transitionTo(VcuState::EMERGENCY_STOP);
             return;
         }
@@ -76,8 +81,9 @@ void run() {
         // so handleEmergencyStop() keeps executing (timer must not reset).
     }
 
-    if ((s_state == VcuState::IDLE || s_state == VcuState::READY ||
-         s_state == VcuState::DRIVE) &&
+    VcuState currentState = s_state.load(std::memory_order_relaxed);
+    if ((currentState == VcuState::IDLE || currentState == VcuState::READY ||
+         currentState == VcuState::DRIVE) &&
         hasCriticalCondition()) {
         ESP_LOGE(TAG, "Critical safety threshold exceeded, entering FAULT");
         transitionTo(VcuState::FAULT);
@@ -104,9 +110,11 @@ void run() {
             transitionTo(VcuState::FAULT);
             return;
         }
+        
+        currentState = s_state.load(std::memory_order_relaxed);
         if (event == VcuEvent::RESET &&
-            (s_state == VcuState::FAULT ||
-             s_state == VcuState::EMERGENCY_STOP)) {
+            (currentState == VcuState::FAULT ||
+             currentState == VcuState::EMERGENCY_STOP)) {
             if (!isResetInterlockSatisfied()) {
                 ESP_LOGW(TAG, "RESET rejected: safety interlock still active");
                 return;
@@ -116,7 +124,7 @@ void run() {
         }
 
         // State-specific event handling
-        switch (s_state) {
+        switch (currentState) {
             case VcuState::IDLE:
                 if (event == VcuEvent::START_REQUEST)
                     transitionTo(VcuState::READY);
@@ -133,7 +141,7 @@ void run() {
     }
 
     // Periodic state logic
-    switch (s_state) {
+    switch (s_state.load(std::memory_order_relaxed)) {
         case VcuState::IDLE:
             handleIdle();
             break;
@@ -170,7 +178,7 @@ void postEvent(VcuEvent event) {
 }
 
 VcuState getState() {
-    return s_state;
+    return s_state.load(std::memory_order_relaxed);
 }
 
 void setTelemetryData(const TelemetryData& TEL_data) {
@@ -215,14 +223,18 @@ static void handleEmergencyStop() {
     // Hold the contactors closed briefly so the zero-torque command can be
     // transmitted before opening the positive contactor bank.
     if (s_stateTimer >= VCU_CONTACTOR_OPEN_DELAY_MS) {
-        RelayManager::instance().allOff();
+        if (!s_relaysOpenedInEstop) {
+            RelayManager::instance().allOff(false); // First time, log it
+            s_relaysOpenedInEstop = true;
+        } else if (s_stateTimer - s_lastEstopLogMs >= 1000) {
+            RelayManager::instance().allOff(true); // Silent re-assert for safety
+        }
     }
 
     // Log once per second to avoid flooding
-    static uint32_t lastLog = 0;
-    if (s_stateTimer - lastLog >= 1000) {
+    if (s_stateTimer - s_lastEstopLogMs >= 1000) {
         ESP_LOGE(TAG, "EMERGENCY STOP active — all relays off");
-        lastLog = s_stateTimer;
+        s_lastEstopLogMs = s_stateTimer;
     }
     // Recovery only via physical reset or explicit RESET event
 }
@@ -233,13 +245,17 @@ static void handleFault() {
     }
 
     if (s_stateTimer >= VCU_CONTACTOR_OPEN_DELAY_MS) {
-        RelayManager::instance().allOff();
+        if (!s_relaysOpenedInFault) {
+            RelayManager::instance().allOff(false); // First time, log it
+            s_relaysOpenedInFault = true;
+        } else if (s_stateTimer - s_lastFaultLogMs >= 1000) {
+            RelayManager::instance().allOff(true); // Silent re-assert for safety
+        }
     }
 
-    static uint32_t lastLog = 0;
-    if (s_stateTimer - lastLog >= 1000) {
+    if (s_stateTimer - s_lastFaultLogMs >= 1000) {
         ESP_LOGE(TAG, "FAULT state — send RESET event to recover");
-        lastLog = s_stateTimer;
+        s_lastFaultLogMs = s_stateTimer;
     }
 }
 
@@ -247,10 +263,19 @@ static void handleFault() {
 // Helpers
 // ---------------------------------------------------------------------------
 static void transitionTo(VcuState next) {
-    ESP_LOGI(TAG, "State: %d → %d", static_cast<int>(s_state),
+    VcuState current = s_state.load(std::memory_order_relaxed);
+    ESP_LOGI(TAG, "State: %d → %d", static_cast<int>(current),
              static_cast<int>(next));
-    s_state = next;
+    s_state.store(next, std::memory_order_relaxed);
     s_stateTimer = 0;
+
+    if (next == VcuState::EMERGENCY_STOP) {
+        s_relaysOpenedInEstop = false;
+        s_lastEstopLogMs = (uint32_t)-1000;
+    } else if (next == VcuState::FAULT) {
+        s_relaysOpenedInFault = false;
+        s_lastFaultLogMs = (uint32_t)-1000;
+    }
 }
 
 static bool pollEvent(VcuEvent& out) {
@@ -271,7 +296,7 @@ static TelemetryData getTelemetrySnapshot() {
 }
 
 static bool isResetInterlockSatisfied() {
-    return isResetInterlockSatisfied(getTelemetrySnapshot(), s_state);
+    return isResetInterlockSatisfied(getTelemetrySnapshot(), s_state.load(std::memory_order_relaxed));
 }
 
 static bool hasWarningCondition() {
@@ -279,7 +304,7 @@ static bool hasWarningCondition() {
 }
 
 static bool hasCriticalCondition() {
-    return hasCriticalCondition(getTelemetrySnapshot(), s_state);
+    return hasCriticalCondition(getTelemetrySnapshot(), s_state.load(std::memory_order_relaxed));
 }
 
 // Motor timeout detection already lives in CanParse::isMotorStatusTimedOut +
@@ -289,11 +314,16 @@ static bool hasCriticalCondition() {
 
 #ifdef VCU_LOGIC_TESTABLE
 void resetForTest() {
-    s_state = VcuState::INIT;
+    s_state.store(VcuState::INIT, std::memory_order_relaxed);
     s_stateTimer = 0;
     s_TEL_latestData = {};
     s_VCU_warningLogged = false;
     s_eStopPending.store(false, std::memory_order_relaxed);
+
+    s_relaysOpenedInEstop = false;
+    s_relaysOpenedInFault = false;
+    s_lastEstopLogMs = 0;
+    s_lastFaultLogMs = 0;
 
     // Olay kuyruğunu (queue) boşalt
     if (s_eventQueue != nullptr) {

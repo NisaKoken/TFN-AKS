@@ -15,7 +15,7 @@ class RelayManager {
     bool begin();
     void setRelay(uint8_t channel, bool state);
     void allOn();   // Close all 10 positive contactors
-    void allOff();  // Open all — SAFETY
+    void allOff(bool silent = false);  // Open all — SAFETY
 
     // Read back current relay state for diagnostics
     bool getRelayState(uint8_t channel) const;

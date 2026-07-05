@@ -193,11 +193,27 @@ void vTask_HMI_Display(void *pvParameters) {
   uint32_t lastStackLog = 0;
 
   DisplayHMI HMI_display;
-  if (!HMI_display.begin()) {
-    ESP_LOGE(TAG, "DisplayHMI init failed — HMI task terminating");
-    esp_task_wdt_delete(nullptr);
-    vTaskDelete(nullptr);
-    return;
+  bool hmi_ok = false;
+  int retry_count = 0;
+  while (!hmi_ok && retry_count < 5) {
+      if (HMI_display.begin()) {
+          hmi_ok = true;
+      } else {
+          if (retry_count == 0) {
+              ESP_LOGW(TAG, "DisplayHMI baslatilamadi, tekrar deneniyor...");
+          }
+          retry_count++;
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          esp_task_wdt_reset();
+      }
+  }
+
+  if (!hmi_ok) {
+      ESP_LOGE(TAG, "DisplayHMI 5 denemede baslatilamadi, HMI task uykuya geciyor (degraded mode)");
+      while (true) {
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          esp_task_wdt_reset();
+      }
   }
 
   uint8_t HMI_incomingCommand = 0;
@@ -213,7 +229,7 @@ void vTask_HMI_Display(void *pvParameters) {
     if (TEL_sensorDataQueue != nullptr) {
         TelemetryData TEL_data = {};
         if (xQueuePeek(TEL_sensorDataQueue, &TEL_data, 0) == pdTRUE) {
-            HMI_screenData.HMI_currentSpeed = TEL_data.TEL_motorRpm;
+            HMI_screenData.HMI_currentSpeed = TEL_data.TEL_speedKmhX10 / 10;
             // SOC/sıcaklık kaynak sinyalleri DOĞRULANMADI (hiç parse
             // edilmiyor, hep 0) — sürücüye sahte "%0 batarya / 0°C"
             // göstermemek için sentinel gönderilir. Kaynak sinyal
@@ -261,19 +277,41 @@ void vTask_HMI_Display(void *pvParameters) {
                     BMS_raw.cellTempC[i] = TEL_data.TEL_bmsTempHighestC;
                 }
 
-                // İlk iki hücreye gerçek max ve min değerini yazarak algoritmanın
-                // uyarı seviyesini doğru hesaplamasını sağlıyoruz.
-                BMS_raw.cellVoltageMv[0] = TEL_data.TEL_bmsCellVoltageMaxDeciMv / 10;
-                BMS_raw.cellVoltageMv[1] = TEL_data.TEL_bmsCellVoltageMinDeciMv / 10;
-
+                // TODO(dogrulama): Lithium Balance E001-E033 tersine mühendisliği
+                // (reverse engineering) henüz tamamlanmadı (açık iş).
+                // Gerçek max/min hücre gerilimi doğrulanana kadar algoritma uyarı seviyesi
+                // avgCellMv üzerinden (sağlıklı varsayılarak) çalışır.
+                // Ekranda ise sahte 0 mV yerine sentinel ("--") gösterilir.
                 BmsComputed BMS_comp = computePack(BMS_raw);
 
-                // Algoritma hesapladıktan sonra ekrana gönderilecek max/min değerlerini
-                // her ihtimale karşı doğrudan gerçek CAN verisinden eziyoruz.
-                BMS_comp.cellMaxMv = TEL_data.TEL_bmsCellVoltageMaxDeciMv / 10;
-                BMS_comp.cellMinMv = TEL_data.TEL_bmsCellVoltageMinDeciMv / 10;
+                if (!HMI_CELL_VOLTAGE_SOURCE_VERIFIED) {
+                    BMS_comp.cellMaxMv = HMI_CELL_VOLTAGE_NO_DATA;
+                    BMS_comp.cellMinMv = HMI_CELL_VOLTAGE_NO_DATA;
+                } else {
+                    BMS_comp.cellMaxMv = TEL_data.TEL_bmsCellVoltageMaxDeciMv / 10;
+                    BMS_comp.cellMinMv = TEL_data.TEL_bmsCellVoltageMinDeciMv / 10;
+                }
 
-                buildBmsNextionCommands(BMS_comp, BMS_raw, BMS_emitNextionCommand, nullptr);
+                static BmsNextionCache BMS_hmiCache = {};
+                static uint32_t BMS_lastCellUpdateMs = 0;
+                static bool BMS_firstRun = true;
+                
+                uint32_t nowMs = (uint32_t)(esp_timer_get_time() / 1000ULL);
+                bool updateCells = false;
+                bool forceRefresh = false;
+
+                if (BMS_firstRun) {
+                    forceRefresh = true;
+                    updateCells = true;
+                    BMS_firstRun = false;
+                    BMS_lastCellUpdateMs = nowMs;
+                } else if (nowMs - BMS_lastCellUpdateMs >= 1000) {
+                    updateCells = true;
+                    BMS_lastCellUpdateMs = nowMs;
+                }
+
+                buildBmsNextionCommands(BMS_comp, BMS_raw, BMS_emitNextionCommand, nullptr,
+                                        BMS_hmiCache, forceRefresh, updateCells);
             }
         }
     }
@@ -358,10 +396,27 @@ void vTask_LoRa_UKS(void *pvParameters) {
       .stop_bits = UART_STOP_BITS_1,
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
   };
-  uart_param_config(LORA_UART_NUM, &LO_uartConfig);
-  uart_set_pin(LORA_UART_NUM, LORA_TX_PIN, LORA_RX_PIN, UART_PIN_NO_CHANGE,
-               UART_PIN_NO_CHANGE);
-  uart_driver_install(LORA_UART_NUM, 256, 256, 0, nullptr, 0);
+  bool uart_ok = false;
+  bool uart_error_logged = false;
+  while (!uart_ok) {
+      esp_err_t err1 = uart_param_config(LORA_UART_NUM, &LO_uartConfig);
+      esp_err_t err2 = uart_set_pin(LORA_UART_NUM, LORA_TX_PIN, LORA_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+      esp_err_t err3 = uart_driver_install(LORA_UART_NUM, 256, 256, 0, nullptr, 0);
+
+      if (err1 == ESP_OK && err2 == ESP_OK && err3 == ESP_OK) {
+          uart_ok = true;
+          if (uart_error_logged) {
+              ESP_LOGI(TAG, "LoRa UART basariyla baslatildi");
+          }
+      } else {
+          if (!uart_error_logged) {
+              ESP_LOGE(TAG, "LoRa UART init failed (err1=%d, err2=%d, err3=%d), tekrar deneniyor...", err1, err2, err3);
+              uart_error_logged = true;
+          }
+          vTaskDelay(pdMS_TO_TICKS(1000));
+          esp_task_wdt_reset();
+      }
+  }
 
   // --- E22 boot konfigürasyonu: oku + gerekirse yaz + doğrula ---
   gpio_set_level(LORA_M0_PIN, LORA_MODE_CONFIG_M0_LEVEL);

@@ -136,7 +136,7 @@
 // Link UP oldugunda tek LORA_TX_PERIOD_MS tikinde en fazla bu kadar
 // buffered (replay) paket gonderilir; canli paket akisi hic kesilmeden
 // (1 canli + en fazla bu kadar replay / tik) buffer bosaltilir (S1).
-#define REPLAY_BURST_PER_TICK  3
+#define REPLAY_BURST_PER_TICK  1
 
 // --- LoRa RX Tanısı ---
 #define LORA_UNKNOWN_BYTE_WARN_INTERVAL_MS 10000U  // RF gurultu tanisi icin en fazla 1 WARN / 10 sn
