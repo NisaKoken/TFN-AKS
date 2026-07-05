@@ -66,7 +66,7 @@ inline bool hasWarningCondition(const TelemetryData& VCU_data) {
 
 inline bool hasCriticalCondition(const TelemetryData& VCU_data,
                                  VcuState currentState) {
-    if (VCU_data.TEL_motorErrorFlags != 0 || VCU_data.TEL_bmsSystemState == 4)
+    if (VCU_data.TEL_motorErrorFlags != 0 || (VCU_data.TEL_bmsDataValid && VCU_data.TEL_bmsSystemState == 4))
         return true;
 
     if (VCU_data.TEL_motorTimeoutActive && currentState != VcuState::IDLE)
@@ -92,7 +92,7 @@ inline bool hasCriticalCondition(const TelemetryData& VCU_data,
 
 inline bool isResetInterlockSatisfied(const TelemetryData& VCU_data,
                                       VcuState currentState) {
-    if (VCU_data.TEL_motorErrorFlags != 0 || VCU_data.TEL_bmsSystemState == 4)
+    if (VCU_data.TEL_motorErrorFlags != 0 || (VCU_data.TEL_bmsDataValid && VCU_data.TEL_bmsSystemState == 4))
         return false;
 
     if (hasCriticalCondition(VCU_data, currentState))

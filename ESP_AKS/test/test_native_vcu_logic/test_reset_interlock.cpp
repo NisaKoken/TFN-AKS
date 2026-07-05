@@ -30,6 +30,13 @@ void test_reset_interlock_bms_error_blocks(void) {
     TEST_ASSERT_FALSE(isResetInterlockSatisfied(d, VcuState::FAULT));
 }
 
+void test_reset_interlock_unverified_bms_system_state_does_not_block(void) {
+    TelemetryData d = makeTelemetryDataValid();
+    d.TEL_bmsSystemState = 4;  // FAULT shaped output
+    d.TEL_bmsDataValid = false;
+    TEST_ASSERT_TRUE(isResetInterlockSatisfied(d, VcuState::FAULT));
+}
+
 // DOĞRULANMAMIŞ sinyaller (sıcaklık/akım) karar mantığına bağlı olmadığı
 // için reset'i de BLOKLAMAMALI (Ek B güven kuralı).
 void test_reset_interlock_unverified_temp_does_not_block(void) {

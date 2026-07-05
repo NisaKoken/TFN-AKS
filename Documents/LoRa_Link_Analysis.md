@@ -47,7 +47,17 @@ Implemented now:
 - RF link is content-wise one-way: AKS→UKS carries telemetry, UKS→AKS carries only the `0xB0` heartbeat byte (no commands — see `LoraRxHandler.h`, 9.2.a).
 - Link-down detection via heartbeat timeout (`LINK_TIMEOUT_MS = 3000`) with a boot-grace window (`BOOT_LINK_GRACE_MS = 5000`) so a UKS that's silent from power-on doesn't look falsely "up".
 - OfflineBuffer ring buffer (`OB_CAPACITY = 75`) retains telemetry during link loss, sampled at 1 Hz (`OFFLINE_SAMPLE_PERIOD_MS = 1000`) while offline.
-- On reconnect: up to `REPLAY_BURST_PER_TICK = 3` buffered packets are replayed per TX tick, plus 1 live packet, until the buffer drains.
+- On reconnect: up to `REPLAY_BURST_PER_TICK = 1` buffered packets are replayed per TX tick, plus 1 live packet, until the buffer drains.
+
+## Replay-Mode Budget
+
+When the link reconnects (link UP), the offline buffer begins to drain while the live stream continues. To prevent buffer overrun at the 9600 baud UART limit (`~192 bytes per 200 ms tick`), the replay burst must be strictly limited.
+
+- Live stream: `1 frame/tick` (`~90 bytes`)
+- Replay stream: `REPLAY_BURST_PER_TICK = 1` (`~90 bytes`)
+- Total TX load: `~180 bytes / tick`
+
+This keeps the TX load strictly under the `192 bytes / tick` budget. Previous configurations using a burst of 3 generated `~360 bytes / tick`, which caused the 256-byte TX buffer to fill, blocking the UART write. This blocking starved the LoRa RX heartbeat handler, causing phantom link timeouts (re-triggering a link DOWN state). With `REPLAY_BURST_PER_TICK = 1`, the task loop remains unblocked and RX processing (which is evaluated before TX) operates securely.
 - All replayed and live packets pass through `TelemetrySanitize::sanitizeForUplink` immediately before `sendStatus` (S4) so UKS's accept ranges are never violated.
 - No AKS retransmission / no AKS-level ACK handling.
 - AUX gate checked before each TX attempt; if busy, TX for that tick is skipped (packet stays queued, not dropped).

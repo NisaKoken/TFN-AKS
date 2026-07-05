@@ -239,6 +239,19 @@ void test_idle_with_motor_timeout_stays_idle(void) {
                           static_cast<int>(VcuLogic::getState()));
 }
 
+void test_idle_with_unverified_bms_system_state_stays_idle(void) {
+    primeIdle();
+    TelemetryData d = makeTelemetryDataValid();
+    d.TEL_bmsSystemState = 4;  // FAULT shaped output
+    d.TEL_bmsDataValid = false;
+    VcuLogic::setTelemetryData(d);
+
+    VcuLogic::run();
+
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(VcuState::IDLE),
+                          static_cast<int>(VcuLogic::getState()));
+}
+
 // ---------------------------------------------------------------------------
 // EMERGENCY_STOP girdikten sonra VCU_CONTACTOR_OPEN_DELAY_MS=20 kadar
 // beklenir; ikinci run() (timer ≥ 20ms) sonrası allOff() tetiklenmeli.
@@ -255,4 +268,30 @@ void test_emergency_stop_opens_contactors_after_delay(void) {
 
     VcuLogic::run();   // stateTimer=20 → allOff
     TEST_ASSERT_EQUAL_UINT(1, g_fake_relay_allOff_count);
+}
+
+void test_fault_latches_contactors_off_once_and_reasserts(void) {
+    primeIdle();
+    fake_relay_reset();
+
+    VcuLogic::postEvent(VcuEvent::FAULT_DETECTED);
+    VcuLogic::run(); // t=0
+    TEST_ASSERT_EQUAL_UINT(0, g_fake_relay_allOff_count);
+
+    VcuLogic::run(); // t=20
+    TEST_ASSERT_EQUAL_UINT(1, g_fake_relay_allOff_count);
+    TEST_ASSERT_EQUAL_UINT(0, g_fake_relay_allOff_silent_count);
+
+    // Simulate runs up to 980ms (48 ticks of 20ms = 960ms + 20ms = 980ms)
+    // Actually, at t=20, it ran. Next is t=40.
+    for(int i=0; i<48; i++) {
+        VcuLogic::run();
+    }
+    // Now t=980
+    TEST_ASSERT_EQUAL_UINT(1, g_fake_relay_allOff_count);
+
+    VcuLogic::run(); // t=1000
+    // At t=1000, 1000 - 0 = 1000, so it logs and silently re-asserts
+    TEST_ASSERT_EQUAL_UINT(2, g_fake_relay_allOff_count);
+    TEST_ASSERT_EQUAL_UINT(1, g_fake_relay_allOff_silent_count);
 }

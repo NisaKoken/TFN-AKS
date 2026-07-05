@@ -20,7 +20,8 @@ uint8_t j0FillFor(uint16_t cell0Mv) {
 
     BmsComputed comp{};  // bu testte içeriği önemsiz — yalnızca j0 bakılıyor
 
-    buildBmsNextionCommands(comp, raw, fake_nextion_capture, nullptr);
+    BmsNextionCache dummyCache{};
+    buildBmsNextionCommands(comp, raw, fake_nextion_capture, nullptr, dummyCache, true, true);
 
     const char* cmd = fake_nextion_find("j0.val=");
     TEST_ASSERT_NOT_NULL(cmd);
