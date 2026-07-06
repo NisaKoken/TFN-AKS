@@ -79,24 +79,49 @@ void DisplayHMI::updateScreen(const HMI_DisplayData& HMI_data) {
     HMI_formatErrorText(HMI_lastScreenData.HMI_motorErrorFlags,
                         HMI_lastErrorText, sizeof(HMI_lastErrorText));
 
+    // §8.2.a.iv sentinel-taşıyan alanlar (bat/temp/packi) Text objesidir
+    // (HMI_Field_Map.md v2, sentinel politikası B): sihirli sayı (255/-127/
+    // INT16_MIN) ekrana sızmasın diye AKS burada "--"/metin formatlar.
+    char HMI_curBatText[8],  HMI_lastBatText[8];
+    char HMI_curTempText[8], HMI_lastTempText[8];
+    char HMI_curCurrText[10], HMI_lastCurrText[10];
+    HMI_formatBatteryText(HMI_data.HMI_currentBattery, HMI_curBatText,
+                          sizeof(HMI_curBatText));
+    HMI_formatBatteryText(HMI_lastScreenData.HMI_currentBattery, HMI_lastBatText,
+                          sizeof(HMI_lastBatText));
+    HMI_formatTempText(HMI_data.HMI_bmsTemperatureC, HMI_curTempText,
+                       sizeof(HMI_curTempText));
+    HMI_formatTempText(HMI_lastScreenData.HMI_bmsTemperatureC, HMI_lastTempText,
+                       sizeof(HMI_lastTempText));
+    HMI_formatCurrentText(HMI_data.HMI_packCurrentDeciA, HMI_curCurrText,
+                          sizeof(HMI_curCurrText));
+    HMI_formatCurrentText(HMI_lastScreenData.HMI_packCurrentDeciA,
+                          HMI_lastCurrText, sizeof(HMI_lastCurrText));
+
     HMI_sendNumericIfChanged("speed", HMI_data.HMI_currentSpeed,
                              HMI_lastScreenData.HMI_currentSpeed,
                              HMI_forceRefresh);
-    HMI_sendNumericIfChanged("bat", HMI_data.HMI_currentBattery,
-                             HMI_lastScreenData.HMI_currentBattery,
-                             HMI_forceRefresh);
+    // §8.2.a.iv SoC — Text ("--" / "0".."100")
+    HMI_sendTextIfChanged("bat", HMI_curBatText, HMI_lastBatText,
+                          HMI_forceRefresh);
     HMI_sendNumericIfChanged("rpm", HMI_data.HMI_motorRpm,
                              HMI_lastScreenData.HMI_motorRpm,
                              HMI_forceRefresh);
     HMI_sendNumericIfChanged("torque", HMI_data.HMI_motorTorqueFeedback,
                              HMI_lastScreenData.HMI_motorTorqueFeedback,
                              HMI_forceRefresh);
-    HMI_sendNumericIfChanged("temp", HMI_data.HMI_bmsTemperatureC,
-                             HMI_lastScreenData.HMI_bmsTemperatureC,
-                             HMI_forceRefresh);
+    // §8.2.a.iv sıcaklık — Text ("--" / "-40".."125")
+    HMI_sendTextIfChanged("temp", HMI_curTempText, HMI_lastTempText,
+                          HMI_forceRefresh);
+    // §8.2.a.iv gerilim — Number (deciV); DOĞRULANDI, gating yok
     HMI_sendNumericIfChanged("packv", HMI_data.HMI_bmsPackVoltageDeciV,
                              HMI_lastScreenData.HMI_bmsPackVoltageDeciV,
                              HMI_forceRefresh);
+    // §8.2.a.iv akım — Text ("--" / "±d.d"). İşaret gösterimi txt ile çözülür
+    // (Prompt 1 sözleşmesi B); kaynak HIPOTEZ olduğundan main.cpp sentinel
+    // besler ve ekran "--" gösterir.
+    HMI_sendTextIfChanged("packi", HMI_curCurrText, HMI_lastCurrText,
+                          HMI_forceRefresh);
 
     HMI_sendTextIfChanged("state", HMI_getStateText(HMI_data.HMI_vcuState),
                           HMI_getStateText(HMI_lastScreenData.HMI_vcuState),

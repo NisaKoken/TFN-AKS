@@ -69,6 +69,11 @@ inline const char* HMI_getContactorText(bool HMI_contactorClosed) {
 constexpr uint8_t HMI_BATTERY_NO_DATA = 255;
 constexpr int16_t HMI_TEMP_NO_DATA = -127;
 constexpr uint16_t HMI_CELL_VOLTAGE_NO_DATA = 65535;
+// Akım sentinel'i (işaretli deci-amper, 0.1 A). Sözleşme (HMI_Field_Map.md v2,
+// Runtime tablosu) INT16_MIN'i "veri yok" olarak sabitler — geçerli akım
+// aralığı (-3000..3000 deciA) dışı. Sentinel politikası B (AKS-tarafı txt):
+// ekrana asla sayı olarak basılmaz, txt formatlayıcı "--" üretir.
+constexpr int16_t HMI_CURRENT_NO_DATA = INT16_MIN;  // -32768 = veri yok
 
 // HIPOTEZ: Bu iki kaynak (0xE000 b[4:5] SoC, 0xE001 b[6:7] sıcaklık)
 // firmware'de PARSE ediliyor ama byte anlamı/ölçeği CAN_Message_Table.md'de
@@ -80,6 +85,7 @@ constexpr uint16_t HMI_CELL_VOLTAGE_NO_DATA = 65535;
 // çekilecek.
 constexpr bool HMI_SOC_SOURCE_VERIFIED = false;          // TEL_bmsSocHundredths (0xE000 b[4:5]) — HIPOTEZ, Prompt 7 bekliyor
 constexpr bool HMI_TEMP_SOURCE_VERIFIED = false;         // TEL_bmsTempHighestC (0xE001 b[6:7]) — HIPOTEZ, Prompt 7 bekliyor
+constexpr bool HMI_CURRENT_SOURCE_VERIFIED = false;      // TEL_bmsCurrentCentiMa (0xE000 b[0:1]) — HIPOTEZ (ölçek/işaret/birim DOĞRULANMADI), Prompt 7 bekliyor
 constexpr bool HMI_CELL_VOLTAGE_SOURCE_VERIFIED = false; // TEL_bmsCellVoltageMaxDeciMv/MinDeciMv — DOĞRULANMADI (kaynak ID yok)
 
 inline uint8_t HMI_batteryDisplayValue(bool HMI_sourceVerified,
@@ -97,6 +103,60 @@ inline int16_t HMI_temperatureDisplayValue(bool HMI_sourceVerified,
     if (!HMI_sourceVerified || !HMI_bmsDataValid)
         return HMI_TEMP_NO_DATA;
     return HMI_temperatureC;
+}
+
+// Akım gösterim değeri (işaretli deci-amper). SoC/sıcaklık ile aynı gating
+// mantığı: kaynak DOĞRULANMADIYSA (HMI_CURRENT_SOURCE_VERIFIED=false) veya
+// BMS verisi taze değilse sentinel döner — doğrulanmamış akım sürücüye sayı
+// gibi gösterilmez (bkz. Prompt 6 Yol A / §8.2.a.iv).
+inline int16_t HMI_currentDisplayValue(bool HMI_sourceVerified,
+                                       bool HMI_bmsDataValid,
+                                       int16_t HMI_packCurrentDeciA) {
+    if (!HMI_sourceVerified || !HMI_bmsDataValid)
+        return HMI_CURRENT_NO_DATA;
+    return HMI_packCurrentDeciA;
+}
+
+// --- Sentinel politikası B: AKS-tarafı txt formatlama (HMI_Field_Map.md v2) ---
+// bat / temp / packi Text objesidir; sihirli sentinel sayıları (255/-127/
+// INT16_MIN) ekrana asla sızmaz — bu formatlayıcılar sentinel'i "--" yapar,
+// aksi halde sözleşmedeki metni üretir. Saf (donanımsız) — native testlenir.
+
+// SoC: HMI_batteryDisplayValue çıktısını (0..100 veya 255) "0".."100" / "--".
+inline void HMI_formatBatteryText(uint8_t HMI_batteryValue, char* HMI_out,
+                                  size_t HMI_outSize) {
+    if (HMI_outSize == 0) return;
+    if (HMI_batteryValue == HMI_BATTERY_NO_DATA)
+        snprintf(HMI_out, HMI_outSize, "--");
+    else
+        snprintf(HMI_out, HMI_outSize, "%u",
+                 static_cast<unsigned>(HMI_batteryValue));
+}
+
+// Sıcaklık: HMI_temperatureDisplayValue çıktısını (°C veya -127) "-40".."125" / "--".
+inline void HMI_formatTempText(int16_t HMI_tempValue, char* HMI_out,
+                               size_t HMI_outSize) {
+    if (HMI_outSize == 0) return;
+    if (HMI_tempValue == HMI_TEMP_NO_DATA)
+        snprintf(HMI_out, HMI_outSize, "--");
+    else
+        snprintf(HMI_out, HMI_outSize, "%d", static_cast<int>(HMI_tempValue));
+}
+
+// Akım: HMI_currentDisplayValue çıktısını (deciA veya INT16_MIN) "±d.d" / "--".
+// Örn: 125 -> "12.5", -80 -> "-8.0", 5 -> "0.5", -5 -> "-0.5", 0 -> "0.0".
+inline void HMI_formatCurrentText(int16_t HMI_currentDeciA, char* HMI_out,
+                                  size_t HMI_outSize) {
+    if (HMI_outSize == 0) return;
+    if (HMI_currentDeciA == HMI_CURRENT_NO_DATA) {
+        snprintf(HMI_out, HMI_outSize, "--");
+        return;
+    }
+    const bool HMI_neg = HMI_currentDeciA < 0;
+    const int HMI_mag = HMI_neg ? -static_cast<int>(HMI_currentDeciA)
+                                : static_cast<int>(HMI_currentDeciA);
+    snprintf(HMI_out, HMI_outSize, "%s%d.%d", HMI_neg ? "-" : "",
+             HMI_mag / 10, HMI_mag % 10);
 }
 
 // Nextion UART tarafı — implementasyonu HMIHelpers.cpp içindedir.

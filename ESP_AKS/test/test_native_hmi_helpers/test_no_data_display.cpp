@@ -68,3 +68,86 @@ void test_temp_verified_valid_passes_through(void) {
     TEST_ASSERT_EQUAL_INT16(25, HMI_temperatureDisplayValue(true, true, 25));
     TEST_ASSERT_EQUAL_INT16(-10, HMI_temperatureDisplayValue(true, true, -10));
 }
+
+// =========================================================================
+// §8.2.a.iv akım (packi) — gating + Prompt 1 sözleşmesi B (txt "--"/"±d.d")
+// =========================================================================
+
+// --- Akım gating (HMI_currentDisplayValue) ---
+
+void test_current_unverified_source_returns_no_data(void) {
+    TEST_ASSERT_EQUAL_INT16(HMI_CURRENT_NO_DATA,
+                            HMI_currentDisplayValue(false, true, 125));
+    TEST_ASSERT_EQUAL_INT16(HMI_CURRENT_NO_DATA,
+                            HMI_currentDisplayValue(false, false, 0));
+}
+
+void test_current_invalid_bms_returns_no_data(void) {
+    TEST_ASSERT_EQUAL_INT16(HMI_CURRENT_NO_DATA,
+                            HMI_currentDisplayValue(true, false, 125));
+}
+
+void test_current_verified_valid_passes_through(void) {
+    TEST_ASSERT_EQUAL_INT16(125, HMI_currentDisplayValue(true, true, 125));
+    TEST_ASSERT_EQUAL_INT16(-80, HMI_currentDisplayValue(true, true, -80));
+}
+
+// --- Sentinel txt politikası B: sihirli sayı ekrana sızmamalı ---
+
+void test_battery_text_sentinel_is_dashes(void) {
+    char buf[8];
+    HMI_formatBatteryText(HMI_BATTERY_NO_DATA, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("--", buf);
+}
+
+void test_battery_text_value(void) {
+    char buf[8];
+    HMI_formatBatteryText(87, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("87", buf);
+    HMI_formatBatteryText(0, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("0", buf);
+    HMI_formatBatteryText(100, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("100", buf);
+}
+
+void test_temp_text_sentinel_is_dashes(void) {
+    char buf[8];
+    HMI_formatTempText(HMI_TEMP_NO_DATA, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("--", buf);
+}
+
+void test_temp_text_value(void) {
+    char buf[8];
+    HMI_formatTempText(25, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("25", buf);
+    HMI_formatTempText(-40, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("-40", buf);
+}
+
+void test_current_text_sentinel_is_dashes(void) {
+    char buf[10];
+    HMI_formatCurrentText(HMI_CURRENT_NO_DATA, buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_STRING("--", buf);
+}
+
+void test_current_text_positive_one_decimal(void) {
+    char buf[10];
+    HMI_formatCurrentText(125, buf, sizeof(buf));  // 12.5 A
+    TEST_ASSERT_EQUAL_STRING("12.5", buf);
+}
+
+void test_current_text_negative_one_decimal(void) {
+    char buf[10];
+    HMI_formatCurrentText(-80, buf, sizeof(buf));  // -8.0 A
+    TEST_ASSERT_EQUAL_STRING("-8.0", buf);
+}
+
+void test_current_text_sub_amp_and_zero(void) {
+    char buf[10];
+    HMI_formatCurrentText(5, buf, sizeof(buf));    // 0.5 A
+    TEST_ASSERT_EQUAL_STRING("0.5", buf);
+    HMI_formatCurrentText(-5, buf, sizeof(buf));   // -0.5 A
+    TEST_ASSERT_EQUAL_STRING("-0.5", buf);
+    HMI_formatCurrentText(0, buf, sizeof(buf));    // 0.0 A
+    TEST_ASSERT_EQUAL_STRING("0.0", buf);
+}

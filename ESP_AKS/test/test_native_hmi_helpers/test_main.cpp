@@ -48,6 +48,19 @@ extern void test_battery_verified_valid_converts_hundredths_to_percent(void);
 extern void test_battery_verified_valid_clamps_above_100(void);
 extern void test_temp_verified_valid_passes_through(void);
 
+// §8.2.a.iv akım (packi) — gating + Prompt 1 sözleşmesi B (txt "--"/"±d.d")
+extern void test_current_unverified_source_returns_no_data(void);
+extern void test_current_invalid_bms_returns_no_data(void);
+extern void test_current_verified_valid_passes_through(void);
+extern void test_battery_text_sentinel_is_dashes(void);
+extern void test_battery_text_value(void);
+extern void test_temp_text_sentinel_is_dashes(void);
+extern void test_temp_text_value(void);
+extern void test_current_text_sentinel_is_dashes(void);
+extern void test_current_text_positive_one_decimal(void);
+extern void test_current_text_negative_one_decimal(void);
+extern void test_current_text_sub_amp_and_zero(void);
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -94,6 +107,19 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_battery_verified_valid_converts_hundredths_to_percent);
     RUN_TEST(test_battery_verified_valid_clamps_above_100);
     RUN_TEST(test_temp_verified_valid_passes_through);
+
+    // §8.2.a.iv akım gating + sentinel txt formatlama
+    RUN_TEST(test_current_unverified_source_returns_no_data);
+    RUN_TEST(test_current_invalid_bms_returns_no_data);
+    RUN_TEST(test_current_verified_valid_passes_through);
+    RUN_TEST(test_battery_text_sentinel_is_dashes);
+    RUN_TEST(test_battery_text_value);
+    RUN_TEST(test_temp_text_sentinel_is_dashes);
+    RUN_TEST(test_temp_text_value);
+    RUN_TEST(test_current_text_sentinel_is_dashes);
+    RUN_TEST(test_current_text_positive_one_decimal);
+    RUN_TEST(test_current_text_negative_one_decimal);
+    RUN_TEST(test_current_text_sub_amp_and_zero);
 
     return UNITY_END();
 }

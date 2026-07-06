@@ -222,9 +222,10 @@ void vTask_HMI_Display(void *pvParameters) {
     esp_task_wdt_reset();
 
     HMI_DisplayData HMI_screenData = {};
-    // Kuyruk boşken de "veri yok" ("--") görünmeli — sahte %0/0°C değil.
+    // Kuyruk boşken de "veri yok" ("--") görünmeli — sahte %0/0°C/0A değil.
     HMI_screenData.HMI_currentBattery = HMI_BATTERY_NO_DATA;
     HMI_screenData.HMI_bmsTemperatureC = HMI_TEMP_NO_DATA;
+    HMI_screenData.HMI_packCurrentDeciA = HMI_CURRENT_NO_DATA;
 
     if (TEL_sensorDataQueue != nullptr) {
         TelemetryData TEL_data = {};
@@ -251,6 +252,17 @@ void vTask_HMI_Display(void *pvParameters) {
                 TEL_data.TEL_bmsTempHighestC);
             HMI_screenData.HMI_bmsPackVoltageDeciV =
                 TEL_data.TEL_bmsPackVoltageDeciV;
+            // §8.2.a.iv akım — gated (Yol A): kaynak HIPOTEZ olduğundan
+            // HMI_CURRENT_SOURCE_VERIFIED=false iken sentinel döner (ekranda "--").
+            // TODO(Prompt 7): TEL_bmsCurrentCentiMa'nın birimi/ölçeği
+            // DOĞRULANDIĞINDA buradaki deciA dönüşümü kesinleşecek (şu an birim
+            // zinciri belirsiz — bkz. CAN_Message_Table.md / HMI_Field_Map.md
+            // AKIM BİRİM NOTU). int16 deciA'ya güvenli daralt; gated olduğu için
+            // geçici dönüşüm değeri ekranı ETKİLEMEZ.
+            HMI_screenData.HMI_packCurrentDeciA = HMI_currentDisplayValue(
+                HMI_CURRENT_SOURCE_VERIFIED, TEL_data.TEL_bmsDataValid,
+                static_cast<int16_t>(TEL_data.TEL_bmsCurrentCentiMa / 100)
+                /* TODO(Prompt 7): birim teyidi */);
         }
     }
 
