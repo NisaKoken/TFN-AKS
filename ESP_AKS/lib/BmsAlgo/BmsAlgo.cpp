@@ -89,6 +89,11 @@ BmsComputed computePack(const BmsPackData& in) {
     }
 
     // --- Uyarı seviyesi: en kötü hücre/sıcaklık koşulu kazanır ---
+    // OTORİTE KURALI (Documents/Threshold_Ownership.md): Bu warningLevel yalnız
+    // EKRAN GÖSTERİMİDİR (Nextion warn alanı, renk/uyarı). VCU FAULT/kontaktör
+    // kararını TETİKLEMEZ — o karar SystemConfig.h pack eşiklerinden VcuLogic
+    // hasCritical/WarningCondition'da verilir. İki set çelişirse SystemConfig
+    // kazanır. Buradaki eşikler (BmsAlgo.h) hücre-bazlı gösterim katmanıdır.
     uint8_t level = BMS_WARN_OK;
     // CRITICAL koşulları
     if (minMv < BMS_CELL_UNDERVOLT_CRIT_MV ||

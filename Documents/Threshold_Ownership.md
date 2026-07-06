@@ -82,12 +82,21 @@ CRITICAL uçları (2500/3650 mV) SystemConfig.h pack CRITICAL eşikleriyle
 (600/876 deciV) hücre×24 ilişkisiyle birebir örtüşür; WARN bandı bu katmana
 özgüdür (SystemConfig.h WARN eşikleriyle 1:1 eşleşmesi gerekmez).
 
-Bu eşikler kod yolunda "ölü" değildir — `computePack()` her HMI tick'inde
-çalışır ve `warningLevel`i gerçekten hesaplar. Ancak girdi (`BmsPackData`),
-`src/main.cpp`'de gerçek 24-hücre verisi yerine tek bir doğrulanmış pack
-voltajının 24 hücreye bölünmüş ortalamasıyla ad-hoc dolduruluyor (ayrı bir
-boşluk — bkz. önceki BMS keşif raporu, madde 4). Yani bu eşikler çalışıyor
-ama gerçek hücre verisi üzerinde değil.
+> **Güncelleme (Prompt 5 — Yol A ile uyumlu):** `src/main.cpp` artık per-cell
+> veriyi ORTALAMAYLA doldurmuyor. Per-cell kaynak (0xE002-E005, E032-E033)
+> DOĞRULANMADIĞI için (tek bayrak `HMI_CELL_VOLTAGE_SOURCE_VERIFIED=false`)
+> hücreler sentinel (65535) ile doldurulur → tüm bar 0, `cellmax/cellmin`
+> sentinel, ve ayrı bir **`cellcan=0`** göstergesi ("CAN doğrulanmadı") basılır.
+> Bu durumda `computePack()` sentinel hücrelerle ÇAĞRILMAZ (65535 > OVERVOLT_CRIT
+> sahte CRITICAL üretirdi); `warningLevel` NÖTR (OK) — bayat/timeout durumunda
+> CRITICAL. Doğrulama sonrası bayrak `true` yapılınca gerçek 24-hücre yolu +
+> gerçek `computePack` warn'ı devreye girer.
+>
+> **`cellcan` vs `warn` ayrımı (otorite kuralı ile uyumlu):** `warn` (0/1/2)
+> BmsAlgo GÖSTERİM eşiğidir; `cellcan` (0/1) veri-KAYNAĞI doğrulama durumudur.
+> "CAN doğrulanmadı" durumu `warn` rengine yüklenMEZ — ayrı `cellcan` alanıyla
+> gösterilir. Böylece ileride gerçek bir hücre uyarısı (warn=2) ile veri-yok
+> durumu (cellcan=0) ekranda birbirine karışmadan görünebilir.
 
 ---
 

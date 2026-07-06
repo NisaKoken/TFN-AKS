@@ -32,6 +32,14 @@ extern void test_cache_init_emits_on_first_nonforced_call(void);
 extern void test_byte_budget_is_respected(void);
 extern void test_valid_to_invalid_data_transition(void);
 
+// cellcan göstergesi (madde 2) — per-cell CAN doğrulama durumu, warn'dan bağımsız
+extern void test_cellcan_zero_when_unverified(void);
+extern void test_cellcan_one_when_verified(void);
+extern void test_cellcan_default_arg_is_zero(void);
+extern void test_cellcan_change_cached(void);
+extern void test_unverified_sentinel_cells_all_bars_zero(void);
+extern void test_cellcan_independent_of_warn(void);
+
 void setUp(void) {
     fake_nextion_reset();
 }
@@ -62,6 +70,14 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_cache_init_emits_on_first_nonforced_call);
     RUN_TEST(test_byte_budget_is_respected);
     RUN_TEST(test_valid_to_invalid_data_transition);
+
+    // cellcan göstergesi (madde 2)
+    RUN_TEST(test_cellcan_zero_when_unverified);
+    RUN_TEST(test_cellcan_one_when_verified);
+    RUN_TEST(test_cellcan_default_arg_is_zero);
+    RUN_TEST(test_cellcan_change_cached);
+    RUN_TEST(test_unverified_sentinel_cells_all_bars_zero);
+    RUN_TEST(test_cellcan_independent_of_warn);
 
     return UNITY_END();
 }

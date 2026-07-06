@@ -47,13 +47,24 @@ using BmsNextionEmit = void (*)(const char* cmd, size_t len, void* ctx);
 //   - cell0.val=<mV> .. cell23.val=<mV>     (her hücre gerilimi, number)
 //   - j0.val=<0..100> .. j23.val=<0..100>   (her hücre bar doluluğu, progress bar)
 //   - bal0.val=<0|1> .. bal23.val=<0|1>     (dengeleme bayrakları)
-//   - cellmax.val / cellmin.val             (uç hücre gerilimleri; ŞİMDİLİK DEMO/
-//                                            sim. Gerçek zamanlıya geçişte bu iki
-//                                            emit kaldırılır, cellmax/cellmin
-//                                            updateScreen'den (BMS_USE_REALTIME_
-//                                            MINMAX) gerçek BMS verisiyle sürülür)
-//   - warn.val=<0|1|2>                      (uyarı seviyesi, sayısal)
+//   - cellmax.val / cellmin.val             (uç hücre gerilimleri — comp'tan
+//                                            GERÇEK BMS verisiyle sürülür;
+//                                            per-cell kaynak doğrulanana kadar
+//                                            çağıran sentinel (65535) geçirir)
+//   - warn.val=<0|1|2>                      (uyarı seviyesi — BmsAlgo GÖSTERİM
+//                                            eşiğinden; VCU FAULT kararı DEĞİL,
+//                                            bkz. Threshold_Ownership.md)
+//   - cellcan.val=<0|1>                     (per-cell CAN verisi doğrulama
+//                                            durumu; 0 = doğrulanmadı/veri yok,
+//                                            1 = doğrulandı. warn RENGİNDEN
+//                                            BAĞIMSIZ ayrı gösterge — madde 2)
 // emit nullptr ise hiçbir şey yapılmaz.
+//
+// cellDataVerified: per-cell veri kaynağı (0xE002-E005, E032-E033) DOĞRULANDI mı?
+// false (varsayılan, ŞU ANKİ durum) => `cellcan.val=0` basılır. Çağıran ayrıca
+// hücreleri sentinel (65535) doldurmalıdır → tüm j*.val=0 (boş bar) olur, sahte
+// per-cell göstergesi verilmez. Tek bayrakla (HMI_CELL_VOLTAGE_SOURCE_VERIFIED)
+// gerçek veriye dönülür.
 struct BmsNextionCache {
     uint16_t cellVoltageMv[BMS_CELL_COUNT];
     uint8_t cellBarFill[BMS_CELL_COUNT];
@@ -61,6 +72,7 @@ struct BmsNextionCache {
     uint16_t cellMaxMv = 0;
     uint16_t cellMinMv = 0;
     uint8_t warningLevel = 255;
+    uint8_t cellCanStatus = 255;  // 255 => ilk çağrıda kesin emit
     bool isWarm = false;
 
     BmsNextionCache() {
@@ -75,4 +87,5 @@ struct BmsNextionCache {
 void buildBmsNextionCommands(const BmsComputed& comp, const BmsPackData& raw,
                              BmsNextionEmit emit, void* ctx,
                              BmsNextionCache& cache, bool forceFullRefresh, bool updateCells,
-                             size_t maxBytes = 90);
+                             size_t maxBytes = 90,
+                             bool cellDataVerified = false);

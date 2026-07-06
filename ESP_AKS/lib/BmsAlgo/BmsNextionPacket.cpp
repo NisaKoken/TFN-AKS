@@ -25,7 +25,7 @@ uint8_t cellBarFill(uint16_t mv) {
 void buildBmsNextionCommands(const BmsComputed& comp, const BmsPackData& raw,
                              BmsNextionEmit emit, void* ctx,
                              BmsNextionCache& cache, bool forceFullRefresh, bool updateCells,
-                             size_t maxBytes) {
+                             size_t maxBytes, bool cellDataVerified) {
     if (emit == nullptr) return;
 
     size_t currentBytes = 0;
@@ -112,9 +112,29 @@ void buildBmsNextionCommands(const BmsComputed& comp, const BmsPackData& raw,
         }
     }
 
+    // warn: BmsAlgo GÖSTERİM eşiğinden gelir (ekran uyarı rengi/metni). Bu alan
+    // VCU FAULT/kontaktör kararını TETİKLEMEZ — o karar SystemConfig.h pack
+    // eşiklerinden VcuLogic'te verilir (bkz. Documents/Threshold_Ownership.md
+    // "Otorite Kuralı"). buildBmsNextionCommands warn'ı OLDUĞU GİBİ basar;
+    // cellDataVerified durumunu warn'a KARIŞTIRMAZ (o ayrı cellcan alanında).
     if (forceFullRefresh || comp.warningLevel != cache.warningLevel) {
         if (emitAndCheck("warn", -1, comp.warningLevel)) {
             cache.warningLevel = comp.warningLevel;
+        } else {
+            allProcessed = false;
+        }
+    }
+
+    // cellcan: per-cell CAN verisi doğrulama durumu (madde 2). warn RENGİNDEN
+    // BAĞIMSIZ, ayrı ve NET gösterge — 0 = "CAN doğrulanmadı" (per-cell veri
+    // yok; hücreler sentinel, tüm bar 0), 1 = doğrulandı (gerçek per-cell veri).
+    // Tek bayrakla (çağırandaki HMI_CELL_VOLTAGE_SOURCE_VERIFIED) gerçek veriye
+    // dönülür. warn'ı asla ÖRTMEZ: kritik bir hücre uyarısı (warn=2) ile veri-
+    // yok durumu (cellcan=0) ekranda AYRI AYRI görünebilir.
+    const uint8_t canStatus = cellDataVerified ? 1u : 0u;
+    if (forceFullRefresh || canStatus != cache.cellCanStatus) {
+        if (emitAndCheck("cellcan", -1, canStatus)) {
+            cache.cellCanStatus = canStatus;
         } else {
             allProcessed = false;
         }

@@ -79,7 +79,13 @@ komutu "100.4" olarak render edilir — firmware değişikliği GEREKMEZ. Tercih
 | `bal0`..`bal23` | Number/Checkbox | `bms.balN.val=<0|1>` | dengeleme bayrağı | 0 |
 | `cellmax` | Number | `bms.cellmax.val=<mV>` | en yüksek hücre mV | 65535 |
 | `cellmin` | Number | `bms.cellmin.val=<mV>` | en düşük hücre mV | 65535 |
-| `warn` | Number | `bms.warn.val=<0|1|2>` | 0=OK, 1=WARNING, 2=CRITICAL | 2 (bayat veri CRITICAL'e çekilir) |
+| `warn` | Number | `bms.warn.val=<0|1|2>` | 0=OK, 1=WARNING, 2=CRITICAL (BmsAlgo GÖSTERİM eşiği; VCU FAULT DEĞİL) | 2 (bayat veri CRITICAL'e çekilir) |
+| `cellcan` **(YENİ)** | Number | `bms.cellcan.val=<0\|1>` | 0=per-cell CAN **doğrulanmadı** (veri yok, tüm bar 0), 1=doğrulandı (gerçek per-cell veri). warn'dan BAĞIMSIZ ayrı gösterge (madde 2) | 0 (boot: doğrulanmadı) |
+
+> `cellcan` notu: Per-cell CAN ID'leri (0xE002-E005, E032-E033) DOĞRULANANA kadar
+> `cellcan=0` kalır; Nextion projesi bunu net bir "HÜCRE CAN: DOĞRULANMADI"
+> banner'ı ile göstermeli (warn rengiyle KARIŞTIRMADAN). Tek bayrak
+> (`HMI_CELL_VOLTAGE_SOURCE_VERIFIED`) true olunca gerçek veri + `cellcan=1`.
 
 ## "Veri Yok" (Sentinel) Politikası — KARAR
 

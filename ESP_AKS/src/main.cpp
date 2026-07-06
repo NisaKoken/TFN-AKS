@@ -287,43 +287,43 @@ void vTask_HMI_Display(void *pvParameters) {
 
         BmsComputed BMS_comp = {};
 
-        if (bmsValid) {
-            // TEL_bmsCurrentCentiMa: raw * 0.01 = mA -> mA için /100.
+        // Per-cell CAN verileri (0xE002-E005, E032-E033) HENÜZ DOĞRULANMADI.
+        // Tek bayrak: HMI_CELL_VOLTAGE_SOURCE_VERIFIED (false). Doğrulama
+        // (Prompt 7) sonrası true yapıldığında AŞAĞIDAKİ "gerçek" yol devreye
+        // girer; şu an hücre sayfası "CAN doğrulanmadı" durumunu gösterir
+        // (cellcan=0 + tüm bar 0), sahte per-cell verisi ÜRETİLMEZ.
+        const bool BMS_cellDataVerified = HMI_CELL_VOLTAGE_SOURCE_VERIFIED;
+
+        if (bmsValid && BMS_cellDataVerified) {
+            // --- GERÇEK per-cell veri yolu (Prompt 7+ sonrası aktif) ---
             BMS_raw.packCurrentMa = TEL_data.TEL_bmsCurrentCentiMa / 100;
-            
-            // Lithium Balance c-BMS'ten 24 hücre verisi henüz ayrı ayrı çözülmedi, sadece packV doğrulandı.
-            // Ekranda (Nextion) 24 hücre barının tümünün hata vermemesi ve sahte (rastgele) veri 
-            // üretmemek adına tüm hücrelere ortalama gerilimi atıyoruz.
-            uint16_t avgCellMv = (TEL_data.TEL_bmsPackVoltageDeciV * 100) / BMS_CELL_COUNT;
+            // TODO(Prompt 7): gerçek 24-hücre gerilim/sıcaklık kaynağı çözülünce
+            // burada doldurulacak. Doğrulanmış özet min/max alanları TEL'den:
             for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
-                BMS_raw.cellVoltageMv[i] = avgCellMv;
+                BMS_raw.cellVoltageMv[i] =
+                    (TEL_data.TEL_bmsPackVoltageDeciV * 100) / BMS_CELL_COUNT;
                 BMS_raw.cellTempC[i] = TEL_data.TEL_bmsTempHighestC;
             }
-
-            // TODO(dogrulama): Lithium Balance E001-E033 tersine mühendisliği
-            // (reverse engineering) henüz tamamlanmadı (açık iş).
-            // Gerçek max/min hücre gerilimi doğrulanana kadar algoritma uyarı seviyesi
-            // avgCellMv üzerinden (sağlıklı varsayılarak) çalışır.
+            // warn GERÇEK hücre eşiklerinden (BmsAlgo) — gösterim otoritesi.
             BMS_comp = computePack(BMS_raw);
-
-            // Ekranda ise sahte 0 mV yerine sentinel ("--") gösterilir.
-            if (!HMI_CELL_VOLTAGE_SOURCE_VERIFIED) {
-                BMS_comp.cellMaxMv = HMI_CELL_VOLTAGE_NO_DATA;
-                BMS_comp.cellMinMv = HMI_CELL_VOLTAGE_NO_DATA;
-            } else {
-                BMS_comp.cellMaxMv = TEL_data.TEL_bmsCellVoltageMaxDeciMv / 10;
-                BMS_comp.cellMinMv = TEL_data.TEL_bmsCellVoltageMinDeciMv / 10;
-            }
+            BMS_comp.cellMaxMv = TEL_data.TEL_bmsCellVoltageMaxDeciMv / 10;
+            BMS_comp.cellMinMv = TEL_data.TEL_bmsCellVoltageMinDeciMv / 10;
         } else {
-            // Geçersiz/bayat veri durumu: Ekranda son değerlerin donup kalmaması
-            // için "--" (sentinel) ve boş bar gönderilir. Uyarı durumu CRITICAL yapılır.
+            // --- "CAN doğrulanmadı" / veri yok yolu (ŞU ANKİ durum) ---
+            // Per-cell veri sentinel (65535): cellN=sentinel, j*=0 (boş bar),
+            // cellmax/min sentinel. "Doğrulanmadı" AYRI cellcan göstergesiyle
+            // bildirilir (warn rengiyle DEĞİL — Threshold_Ownership.md otorite
+            // kuralı). warn: bmsValid ise NÖTR (OK), bayat/timeout ise CRITICAL.
+            // Sentinel hücreleri computePack'e VERMEYİZ — aksi halde
+            // 65535 > OVERVOLT_CRIT sahte bir CRITICAL üretirdi (warn otoritesi
+            // yalnız GERÇEK hücre verisine dayanmalı).
             for (uint8_t i = 0; i < BMS_CELL_COUNT; ++i) {
                 BMS_raw.cellVoltageMv[i] = HMI_CELL_VOLTAGE_NO_DATA;
                 BMS_comp.balanceFlag[i] = false;
             }
             BMS_comp.cellMaxMv = HMI_CELL_VOLTAGE_NO_DATA;
             BMS_comp.cellMinMv = HMI_CELL_VOLTAGE_NO_DATA;
-            BMS_comp.warningLevel = BMS_WARN_CRITICAL;
+            BMS_comp.warningLevel = bmsValid ? BMS_WARN_OK : BMS_WARN_CRITICAL;
         }
 
         static BmsNextionCache BMS_hmiCache = {};
@@ -346,7 +346,8 @@ void vTask_HMI_Display(void *pvParameters) {
         }
 
         buildBmsNextionCommands(BMS_comp, BMS_raw, BMS_emitNextionCommand, nullptr,
-                                BMS_hmiCache, forceRefresh, updateCells);
+                                BMS_hmiCache, forceRefresh, updateCells,
+                                /*maxBytes*/ 90, BMS_cellDataVerified);
     }
 
     if (HMI_display.readTouchCommand(HMI_incomingCommand)) {
