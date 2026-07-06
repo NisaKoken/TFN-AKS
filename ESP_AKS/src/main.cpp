@@ -221,6 +221,11 @@ void vTask_HMI_Display(void *pvParameters) {
   while (true) {
     esp_task_wdt_reset();
 
+    // §9.4.a.vii: Nextion reset geçen tikte algılandıysa BMS sayfasını da tam
+    // yeniden gönder (ana sayfa cache'i readTouchCommand'da zaten sıfırlandı →
+    // updateScreen kendiliğinden force-refresh yapar).
+    const bool HMI_bmsForceFromReset = HMI_display.takeNextionResetFlag();
+
     HMI_DisplayData HMI_screenData = {};
     // Kuyruk boşken de "veri yok" ("--") görünmeli — sahte %0/0°C/0A değil.
     HMI_screenData.HMI_currentBattery = HMI_BATTERY_NO_DATA;
@@ -329,7 +334,8 @@ void vTask_HMI_Display(void *pvParameters) {
         bool updateCells = false;
         bool forceRefresh = false;
 
-        if (BMS_firstRun) {
+        if (BMS_firstRun || HMI_bmsForceFromReset) {
+            // İlk çalışma VEYA Nextion reset → tüm BMS objelerini yeniden bas.
             forceRefresh = true;
             updateCells = true;
             BMS_firstRun = false;

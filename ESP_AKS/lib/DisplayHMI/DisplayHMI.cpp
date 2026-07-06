@@ -12,7 +12,9 @@ static constexpr const char *TAG = "DisplayHMI";
 DisplayHMI::DisplayHMI()
     : HMI_isInitialized(false),
       HMI_hasCachedScreen(false),
-      HMI_lastScreenData({}) {}
+      HMI_lastScreenData({}),
+      HMI_rxState({}),
+      HMI_nextionResetPending(false) {}
 
 bool DisplayHMI::begin() {
     if (HMI_isInitialized) return true;
@@ -43,6 +45,13 @@ bool DisplayHMI::begin() {
     }
 
     HMI_isInitialized = true;
+
+    // §9.4.a.vii (ESP power-cycle): ESP resetlendiğinde bu nesne yeniden
+    // kurulur (cache boş) ama begin() tekrar çağrılırsa da cache'i açıkça
+    // yok say — sonraki updateScreen TÜM alanları force-refresh ile basar.
+    HMI_hasCachedScreen = false;
+    HMI_rxState = HMI_RxState{};
+    HMI_nextionResetPending = false;
 
     // Nextion açılış mesajlarını temizle
     HMI_drainRxBuffer();
@@ -149,49 +158,47 @@ bool DisplayHMI::readTouchCommand(uint8_t& HMI_command) {
     if (!HMI_isInitialized) return false;
 
     // --- HMI Command Frame Format ---
-    // The HMI must send commands as a 3-byte frame to ensure integrity:
-    // [HEADER] [COMMAND] [CHECKSUM]
-    // HEADER   = 0x5A
-    // COMMAND  = HMI_CMD_... (e.g. 0x01 for START)
-    // CHECKSUM = ~COMMAND (bitwise NOT of COMMAND)
-    // 
-    // Example START frame: 0x5A 0x01 0xFE
-    
-    static int rxState = 0;
-    static uint8_t pendingCmd = 0;
+    // Dokunmatik komut 3-byte çerçeve: [0x5A] [KOMUT] [~KOMUT] (checksum).
+    // Örnek START: 0x5A 0x01 0xFE. Sınıflandırma (touch vs Nextion sistem
+    // byte'ları) HMI_rxClassifyByte'ta (saf, native testli) yapılır — böylece
+    // 0x88 / 00 00 00 FF FF FF gibi sistem yanıtları touch komutuyla KARIŞMAZ.
 
-    uint8_t rxByte;
-    // Timeout pdMS_TO_TICKS(10) ile en az 1 byte bekler (eski davranis),
-    // ardindan bufferdaki kalan bytelari 0 timeout ile ceker.
-    int rxBytes = uart_read_bytes(HMI_UART_NUM, &rxByte, 1, pdMS_TO_TICKS(10));
-    if (rxBytes <= 0) return false;
+    uint8_t HMI_rxByte;
+    // pdMS_TO_TICKS(10) ile en az 1 byte bekler; ardından buffer'daki kalanları
+    // 0 timeout ile çeker (böylece komut + reset marker aynı taramada yakalanır).
+    int HMI_rxBytes =
+        uart_read_bytes(HMI_UART_NUM, &HMI_rxByte, 1, pdMS_TO_TICKS(10));
+    if (HMI_rxBytes <= 0) return false;
+
+    bool HMI_gotCommand = false;
 
     do {
-        if (rxByte == 0xFF || rxByte == 0x00) {
-            // Nextion invalid/ack artiklari - guvenle atla ve state resetle
-            rxState = 0;
-            continue;
-        }
+        uint8_t HMI_cmd = 0;
+        const HMI_RxEvent HMI_ev =
+            HMI_rxClassifyByte(HMI_rxState, HMI_rxByte, HMI_cmd);
 
-        if (rxState == 0) {
-            if (rxByte == 0x5A) {
-                rxState = 1;
-            }
-        } else if (rxState == 1) {
-            pendingCmd = rxByte;
-            rxState = 2;
-        } else if (rxState == 2) {
-            uint8_t expectedChecksum = (uint8_t)(~pendingCmd);
-            rxState = 0; // reset state for next command
-            if (rxByte == expectedChecksum) {
-                HMI_command = pendingCmd;
-                return true;
-            } else {
-                ESP_LOGW(TAG, "HMI command checksum mismatch: cmd=0x%02X, csum=0x%02X, expected=0x%02X",
-                         pendingCmd, rxByte, expectedChecksum);
-            }
+        if (HMI_ev == HMI_RxEvent::NEXTION_RESET) {
+            // §9.4.a.vii: Nextion power-on/reset → tam ekran yeniden basımı.
+            // Ana sayfa: cache'i sıfırla (sonraki updateScreen force-refresh).
+            // BMS sayfası: main.cpp'nin takeNextionResetFlag() ile göreceği bayrak.
+            HMI_hasCachedScreen = false;
+            HMI_nextionResetPending = true;
+            ESP_LOGW(TAG,
+                     "Nextion reset algilandi (0x88/startup) — tam ekran "
+                     "yeniden gonderilecek");
+        } else if (HMI_ev == HMI_RxEvent::TOUCH && !HMI_gotCommand) {
+            HMI_command = HMI_cmd;
+            HMI_gotCommand = true;
+            // return ETME: aynı buffer'da reset marker da olabilir, taramayı
+            // sürdürüp onu da yakala (touch nadir; ikinci touch pratikte gelmez).
         }
-    } while (uart_read_bytes(HMI_UART_NUM, &rxByte, 1, 0) == 1);
+    } while (uart_read_bytes(HMI_UART_NUM, &HMI_rxByte, 1, 0) == 1);
 
-    return false;
+    return HMI_gotCommand;
+}
+
+bool DisplayHMI::takeNextionResetFlag() {
+    const bool HMI_pending = HMI_nextionResetPending;
+    HMI_nextionResetPending = false;
+    return HMI_pending;
 }

@@ -61,6 +61,21 @@ extern void test_current_text_positive_one_decimal(void);
 extern void test_current_text_negative_one_decimal(void);
 extern void test_current_text_sub_amp_and_zero(void);
 
+// RX sınıflandırıcısı — touch vs Nextion sistem yanıtı karışması (§9.4.a.vii)
+extern void test_rx_touch_start_cmd1(void);
+extern void test_rx_touch_all_four_commands(void);
+extern void test_rx_touch_checksum_mismatch_no_command(void);
+extern void test_rx_0x88_is_reset_not_touch(void);
+extern void test_rx_startup_sequence_is_reset(void);
+extern void test_rx_startup_with_extra_leading_zeros(void);
+extern void test_rx_bare_ff_run_no_reset(void);
+extern void test_rx_two_zeros_then_ff_no_reset(void);
+extern void test_rx_broken_startup_pattern_no_reset(void);
+extern void test_rx_reset_then_touch_both_seen(void);
+extern void test_rx_startup_then_touch_both_seen(void);
+extern void test_rx_stray_ff_before_touch_does_not_corrupt(void);
+extern void test_rx_touch_bytes_never_trigger_reset(void);
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -120,6 +135,21 @@ int main(int /*argc*/, char ** /*argv*/) {
     RUN_TEST(test_current_text_positive_one_decimal);
     RUN_TEST(test_current_text_negative_one_decimal);
     RUN_TEST(test_current_text_sub_amp_and_zero);
+
+    // RX sınıflandırıcısı — touch vs Nextion sistem yanıtı karışması
+    RUN_TEST(test_rx_touch_start_cmd1);
+    RUN_TEST(test_rx_touch_all_four_commands);
+    RUN_TEST(test_rx_touch_checksum_mismatch_no_command);
+    RUN_TEST(test_rx_0x88_is_reset_not_touch);
+    RUN_TEST(test_rx_startup_sequence_is_reset);
+    RUN_TEST(test_rx_startup_with_extra_leading_zeros);
+    RUN_TEST(test_rx_bare_ff_run_no_reset);
+    RUN_TEST(test_rx_two_zeros_then_ff_no_reset);
+    RUN_TEST(test_rx_broken_startup_pattern_no_reset);
+    RUN_TEST(test_rx_reset_then_touch_both_seen);
+    RUN_TEST(test_rx_startup_then_touch_both_seen);
+    RUN_TEST(test_rx_stray_ff_before_touch_does_not_corrupt);
+    RUN_TEST(test_rx_touch_bytes_never_trigger_reset);
 
     return UNITY_END();
 }

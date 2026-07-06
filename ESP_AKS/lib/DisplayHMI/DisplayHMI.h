@@ -34,6 +34,14 @@ class DisplayHMI {
     bool HMI_hasCachedScreen;
     HMI_DisplayData HMI_lastScreenData;
 
+    // RX yolu durumu (touch + Nextion reset sınıflandırıcısı için kalıcı).
+    HMI_RxState HMI_rxState;
+    // Nextion reset (0x88 / 00 00 00 FF FF FF) algılandığında set edilir;
+    // main.cpp BMS sayfasını da tam yenilesin diye takeNextionResetFlag() ile
+    // okunup temizlenir. Ana sayfa yenilemesi ayrıca HMI_hasCachedScreen=false
+    // ile tetiklenir (bkz. readTouchCommand).
+    bool HMI_nextionResetPending;
+
     void HMI_drainRxBuffer();
 
    public:
@@ -41,4 +49,10 @@ class DisplayHMI {
     bool begin();
     void updateScreen(const HMI_DisplayData& HMI_data);
     bool readTouchCommand(uint8_t& HMI_command);
+
+    // §9.4.a.vii: Nextion reset bayrağını okuyup temizler (true = geçen RX
+    // taramasında reset görüldü). Ana sayfa cache'i readTouchCommand içinde
+    // zaten sıfırlanır; bu, çağıranın (main.cpp) BMS sayfasını da tam yeniden
+    // göndermesi içindir.
+    bool takeNextionResetFlag();
 };
