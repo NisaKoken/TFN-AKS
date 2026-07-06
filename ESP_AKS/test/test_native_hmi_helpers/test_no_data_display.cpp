@@ -29,10 +29,13 @@ void test_temp_unverified_source_returns_no_data(void) {
                             HMI_temperatureDisplayValue(false, false, 0));
 }
 
-void test_production_source_verified_flags_are_true(void) {
-    // Sinyaller doğrulandığı için artık TRUE olmalılar.
-    TEST_ASSERT_TRUE(HMI_SOC_SOURCE_VERIFIED);
-    TEST_ASSERT_TRUE(HMI_TEMP_SOURCE_VERIFIED);
+void test_production_source_verified_flags_are_false_pending_hw_verify(void) {
+    // SoC (0xE000 b[4:5]) ve sıcaklık (0xE001 b[6:7]) PARSE ediliyor ama byte
+    // anlamı/ölçeği HIPOTEZ (bkz. CAN_Message_Table.md) — Prompt 7 donanım
+    // sniffer teyidine kadar bayraklar false; ekran sentinel ("--") gösterir.
+    // Teyit yapıldığında bu test true bekleyecek şekilde güncellenecek.
+    TEST_ASSERT_FALSE(HMI_SOC_SOURCE_VERIFIED);
+    TEST_ASSERT_FALSE(HMI_TEMP_SOURCE_VERIFIED);
 }
 
 // --- bmsDataValid=false -> kaynak doğrulanmış olsa bile sentinel ---

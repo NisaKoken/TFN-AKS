@@ -70,9 +70,17 @@ constexpr uint8_t HMI_BATTERY_NO_DATA = 255;
 constexpr int16_t HMI_TEMP_NO_DATA = -127;
 constexpr uint16_t HMI_CELL_VOLTAGE_NO_DATA = 65535;
 
-constexpr bool HMI_SOC_SOURCE_VERIFIED = true;          // TEL_bmsSocHundredths — ÇÖZÜLDÜ (0xE000)
-constexpr bool HMI_TEMP_SOURCE_VERIFIED = true;         // TEL_bmsTempHighestC — ÇÖZÜLDÜ (0xE001)
-constexpr bool HMI_CELL_VOLTAGE_SOURCE_VERIFIED = false; // TEL_bmsCellVoltageMaxDeciMv/MinDeciMv — DOĞRULANMADI
+// HIPOTEZ: Bu iki kaynak (0xE000 b[4:5] SoC, 0xE001 b[6:7] sıcaklık)
+// firmware'de PARSE ediliyor ama byte anlamı/ölçeği CAN_Message_Table.md'de
+// hâlâ HIPOTEZ seviyesinde (SoC için byte[4:5] "kapasite sayacı adayı" ile
+// çelişki, sıcaklık için HIPOTEZ-orta). Sniffer ile bağımsız doğrulama
+// Prompt 7 (donanım) aşamasına ait — o teyit YAPILANA KADAR bu bayraklar
+// false kalır ve ekran gerçek sayı yerine sentinel ("--") gösterir. Teyit
+// sonrası ilgili bayrak true yapılıp CAN_Message_Table.md DOĞRULANDI'ya
+// çekilecek.
+constexpr bool HMI_SOC_SOURCE_VERIFIED = false;          // TEL_bmsSocHundredths (0xE000 b[4:5]) — HIPOTEZ, Prompt 7 bekliyor
+constexpr bool HMI_TEMP_SOURCE_VERIFIED = false;         // TEL_bmsTempHighestC (0xE001 b[6:7]) — HIPOTEZ, Prompt 7 bekliyor
+constexpr bool HMI_CELL_VOLTAGE_SOURCE_VERIFIED = false; // TEL_bmsCellVoltageMaxDeciMv/MinDeciMv — DOĞRULANMADI (kaynak ID yok)
 
 inline uint8_t HMI_batteryDisplayValue(bool HMI_sourceVerified,
                                        bool HMI_bmsDataValid,

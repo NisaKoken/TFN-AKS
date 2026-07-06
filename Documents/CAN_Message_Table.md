@@ -51,7 +51,14 @@ Protocol parameters:
 
 Güven seviyeleri: **DOĞRULANDI** (bağımsız ölçümle teyit edildi) / **HIPOTEZ-orta** (tutarlı
 gözlem var, bağımsız teyit yok) / **HIPOTEZ-düşük** (UNVERIFIED — ölçek/anlam bilinmiyor).
-HIPOTEZ seviyesindeki alanlar firmware'de parse edilmemeli, TelemetryData'ya yazılmamalıdır.
+
+**Parse kuralı (Prompt 6 — Yol A ile güncellendi):** HIPOTEZ seviyesindeki alanlar
+firmware'de TelemetryData'ya yazılabilir (telemetri logu için), ANCAK:
+(a) sürücü-yüzü HMI'de gerçek sayı olarak GÖSTERİLMEZ — `HMI_*_SOURCE_VERIFIED=false`
+ile sentinel ("--") gösterilir; ve (b) VCU güvenlik kararına (FAULT/kontaktör)
+BAĞLANMAZ. Yalnızca **DOĞRULANDI** alanlar sürücü ekranına ve güvenlik kararına
+bağlanabilir. Aşağıda "Firmware durumu" notları hangi alanların bu HIPOTEZ+gated
+yolda olduğunu kaydeder.
 
 ### `0xE000` — Pack Voltage (ÇÖZÜLDÜ)
 
@@ -75,6 +82,13 @@ Doğrulama:
 
 Decode kuralı iki farklı paket/oturumda bağımsız olarak doğrulandı — güçlü kanıt.
 
+**Firmware durumu (Prompt 6 — Yol A):** `CanParse::parseLbBmsE000` şu an:
+- `byte[2:3]` → `TEL_bmsPackVoltageDeciV` (**DOĞRULANDI** — HMI'de gösterilir, VCU kararına bağlı).
+- `byte[0:1]` → `TEL_bmsCurrentCentiMa`, ölçek raw*10 (**HIPOTEZ** — Prompt 7 bekliyor; HMI'de gösterilmez, VCU'ya bağlı değil). Birim adı da belirsiz (CentiMa/0.01A/centi-mA çelişkisi — kodda çözülecek).
+- `byte[4:5]` → `TEL_bmsSocHundredths`, ölçek raw*0.01% (**HIPOTEZ** — bu tablo aynı byte'ları "kapasite sayacı adayı" ile çelişkili işaretliyor; Prompt 7'de SoC mi sayaç mı netleşecek; HMI'de sentinel gösterilir).
+
+**Prompt 7 sniffer teyidi gerekenler:** akım ölçek/işaret (bilinen yük altında), byte[4:5] SoC mi kapasite sayacı mı (bilinen SoC'den şarj/deşarj ile).
+
 ### `0xE001` — Analog Kanallar + Sıcaklık Adayı (HIPOTEZ)
 
 Direction: `BMS -> AKS` | Status: **DOĞRULANMADI** (hipotez seviyesinde gözlemler var)
@@ -89,8 +103,13 @@ Direction: `BMS -> AKS` | Status: **DOĞRULANMADI** (hipotez seviyesinde gözlem
 | 6 | Sıcaklık 1 (aday) | `uint8_t`? | °C? | ⚠️ HIPOTEZ-orta | `0x19` = 25; oturum sırasındaki ortam sıcaklığı ile tutarlı. Doğrulanmadı. |
 | 7 | Sıcaklık 2 (aday) | `uint8_t`? | °C? | ⚠️ HIPOTEZ-orta | `0x19` = 25; byte 6 ile aynı değer. Doğrulanmadı. |
 
-Ham byte'lar debug log'a basılıyor, TelemetryData'ya yazılmıyor. Hipotezler doğrulanana kadar
-firmware'de parse edilmemelidir.
+**Firmware durumu (Prompt 6 — Yol A):** `CanParse::parseLbBmsE001` `byte[6]`/`byte[7]`'yi
+iki sıcaklık sensörü adayı olarak parse eder ve `TEL_bmsTempHighestC = max(b6,b7)`,
+`TEL_bmsTempLowestC = min(b6,b7)` yazar (B3 §9.2.c.ii "en yüksek olanının sıcaklığı").
+Değerler **HIPOTEZ** (byte anlamı DOĞRULANMADI) — HMI'de `HMI_TEMP_SOURCE_VERIFIED=false`
+ile sentinel gösterilir, `BMS_*_MAX_TEMP_C` eşikleri VCU'ya bağlanmaz. `byte[0:5]`
+(analog kanal adayları) hâlâ parse EDİLMİYOR. **Prompt 7:** sensörü bilinen sıcaklığa
+maruz bırakıp ham byte = °C eşleşmesini teyit et.
 
 ### `0xE002` — BİLİNMİYOR
 

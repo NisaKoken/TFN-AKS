@@ -230,11 +230,12 @@ void vTask_HMI_Display(void *pvParameters) {
         TelemetryData TEL_data = {};
         if (xQueuePeek(TEL_sensorDataQueue, &TEL_data, 0) == pdTRUE) {
             HMI_screenData.HMI_currentSpeed = TEL_data.TEL_speedKmhX10 / 10;
-            // SOC/sıcaklık kaynak sinyalleri DOĞRULANMADI (hiç parse
-            // edilmiyor, hep 0) — sürücüye sahte "%0 batarya / 0°C"
-            // göstermemek için sentinel gönderilir. Kaynak sinyal
-            // DOĞRULANDIĞINDA HMI_*_SOURCE_VERIFIED true yapılıp bu geçici
-            // yol kaldırılacak (bkz. HMIHelpers.h "Veri yok gösterimi").
+            // SOC/sıcaklık artık 0xE000 b[4:5] / 0xE001 b[6:7]'den PARSE
+            // ediliyor ama byte anlamı/ölçeği HIPOTEZ (bkz. CAN_Message_Table.md)
+            // — Prompt 7 donanım teyidine kadar HMI_*_SOURCE_VERIFIED=false, bu
+            // yüzden sürücüye doğrulanmamış değer yerine sentinel ("--")
+            // gönderilir. Teyit sonrası bayrak true yapılıp bu yol kaldırılacak
+            // (bkz. HMIHelpers.h "Veri yok gösterimi").
             HMI_screenData.HMI_currentBattery = HMI_batteryDisplayValue(
                 HMI_SOC_SOURCE_VERIFIED, TEL_data.TEL_bmsDataValid,
                 TEL_data.TEL_bmsSocHundredths);
@@ -733,17 +734,19 @@ extern "C" void app_main() {
 #endif
 
   // AÇIK İŞ (2026-07-03 merge, Solion SK -> Lithium Balance c-BMS donanım
-  // geçişi): CanParse::parseLbBmsE000 yalnızca packV alanını çözüyor;
-  // tempH/tempL/sysState/current/soc alanları hiçbir CAN ID'den parse
-  // EDİLMİYOR (TelemetryData value-init default'unda kalıyor).
-  // TelemetrySanitize::sanitizeSystemState(0) bunu FAULT(4) yapar — yani
-  // UKS ekranında BMS her zaman FAULT görünür, gerçek bir arıza olmasa
-  // bile. Ayrıca BMS_WARN_MAX_TEMP_C / BMS_CRITICAL_MAX_TEMP_C eşikleri
-  // (SystemConfig.h) hiç tetiklenmez (temp hep 0 okunur). Bkz.
-  // TEKNIK_KONTROL_PROVASI.md "AÇIK İŞ" maddesi (9.2.c.ii).
-  ESP_LOGW(TAG, "BMS: LB parse eksik — tempH/soc/sysState vb. placeholder, "
-                "sysState=FAULT gorunur (bkz. CanParse.cpp Lithium Balance "
-                "stub'lari)");
+  // geçişi): CanParse::parseLbBmsE000/E001 packV (DOĞRULANDI), current/soc
+  // (0xE000) ve tempH/tempL (0xE001) alanlarını çözüyor; ANCAK current/soc/
+  // temp byte anlamı/ölçeği CAN_Message_Table.md'de HIPOTEZ seviyesinde —
+  // Prompt 7 (donanım sniffer) teyidine kadar HMI_*_SOURCE_VERIFIED=false
+  // olduğundan bu alanlar sürücü ekranında sentinel ("--") gösterilir ve VCU
+  // kararına BAĞLI DEĞİL. sysState HÂLÂ hiçbir CAN ID'den parse EDİLMİYOR
+  // (value-init 0); TelemetrySanitize::sanitizeSystemState(0)=FAULT(4) — yani
+  // UKS ekranında BMS sistem durumu gerçek arıza olmasa bile FAULT görünür.
+  // BMS_WARN_MAX_TEMP_C / BMS_CRITICAL_MAX_TEMP_C eşikleri de VCU'ya BAĞLANMADI
+  // (temp HIPOTEZ). Bkz. TEKNIK_KONTROL_PROVASI.md "AÇIK İŞ" (9.2.c.ii).
+  ESP_LOGW(TAG, "BMS: current/soc/temp HIPOTEZ (ekranda sentinel, VCU'ya bagli "
+                "degil); sysState parse edilmiyor -> UKS'te FAULT gorunur "
+                "(bkz. CanParse.cpp + CAN_Message_Table.md)");
 
   // --- Hardware initialization (before any tasks) ---
 

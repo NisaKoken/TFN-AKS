@@ -24,14 +24,22 @@ bool parseLbBmsE000(const twai_message_t& msg, TelemetryData& out) {
     if (msg.data_length_code < 8)
         return false;
 
-    // DOĞRULANDI: byte[0:1] = Pack Current, int16_t, Çarpan 0.1A
+    // HIPOTEZ (ölçek/işaret DOĞRULANMADI — Prompt 7 sniffer teyidi bekliyor):
+    // byte[0:1] = Pack Current adayı, int16_t. Ölçek burada raw*10 (aday) olarak
+    // uygulanıyor ama CAN_Message_Table.md bu ölçeği UNVERIFIED işaretliyor. Değer
+    // TelemetryData'ya yazılır (telemetri logu için) ANCAK sürücü ekranına gerçek
+    // veri gibi BASILMAZ (HMI akım alanı yok) ve VCU kararına BAĞLI DEĞİL.
     int16_t raw_current = static_cast<int16_t>((msg.data[0] << 8) | msg.data[1]);
     out.TEL_bmsCurrentCentiMa = static_cast<int32_t>(raw_current) * 10;
 
-    // DOĞRULANDI: byte[2:3] = Pack Voltage, uint16_t, Çarpan 0.1V
+    // DOĞRULANDI: byte[2:3] = Pack Voltage, uint16_t, Çarpan 0.1V (2 sniffer
+    // oturumunda bağımsız teyit — bu alan VCU güvenlik kararına bağlıdır).
     out.TEL_bmsPackVoltageDeciV = static_cast<uint16_t>((msg.data[2] << 8) | msg.data[3]);
 
-    // DOĞRULANDI: byte[4:5] = SoC 1, uint16_t, Çarpan 0.01%
+    // HIPOTEZ (alan ANLAMI DOĞRULANMADI — Prompt 7 bekliyor): byte[4:5] SoC olarak
+    // yorumlanıyor (raw*0.01%), fakat CAN_Message_Table.md bu byte'ları "kapasite
+    // sayacı adayı" olarak işaretliyor (idle'da AZALIYORDU — SoC aleyhine kanıt).
+    // Yazılır ama HMI_SOC_SOURCE_VERIFIED=false olduğundan ekranda sentinel gösterilir.
     out.TEL_bmsSocHundredths = static_cast<uint16_t>((msg.data[4] << 8) | msg.data[5]);
 
     out.TEL_bmsDataValid = true;
@@ -59,14 +67,22 @@ bool parseCharger1806E5F4(const twai_message_t& msg, ChargerCommand& out) {
 // --- ama TelemetryData'ya anlam yüklenmez. İleride gerçek anlam çözüldükçe
 // --- bu fonksiyonların içi doldurulacaktır.
 
-// 0xE001 — Sıcaklık Değerleri DOĞRULANDI
+// 0xE001 — Sıcaklık (HIPOTEZ — ölçek/anlam DOĞRULANMADI, Prompt 7 bekliyor).
+// byte[6] ve byte[7] iki sıcaklık sensörü adayı (int8_t, °C aday). Şartname
+// B3 §9.2.c.ii telemetride "en yüksek olanının sıcaklığı" istediğinden
+// TEL_bmsTempHighestC = max(t1,t2), TEL_bmsTempLowestC = min(t1,t2) olarak
+// hesaplanır (byte sırasına körü körüne güvenilmez; hangi sensörün sıcak
+// olduğu frame'e göre değişebilir). CAN_Message_Table.md bu byte'ları
+// HIPOTEZ-orta işaretliyor — HMI_TEMP_SOURCE_VERIFIED=false olduğundan ekranda
+// sentinel gösterilir.
 bool parseLbBmsE001(const twai_message_t& msg, TelemetryData& out) {
     if (msg.data_length_code < 8)
         return false;
 
-    // DOĞRULANDI: byte[6:7] = Temperature 1 & 2, int8_t, ofset yok doğrudan Celsius
-    out.TEL_bmsTempHighestC = static_cast<int8_t>(msg.data[6]);
-    out.TEL_bmsTempLowestC = static_cast<int8_t>(msg.data[7]);
+    const int8_t t1 = static_cast<int8_t>(msg.data[6]);
+    const int8_t t2 = static_cast<int8_t>(msg.data[7]);
+    out.TEL_bmsTempHighestC = (t1 >= t2) ? t1 : t2;  // en yüksek olan (9.2.c.ii)
+    out.TEL_bmsTempLowestC = (t1 <= t2) ? t1 : t2;   // en düşük olan
 
     return true;
 }

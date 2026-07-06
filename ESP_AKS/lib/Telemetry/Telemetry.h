@@ -49,16 +49,16 @@ struct TelemetryData {
     // Bu alanlar TelemetryData yapısında kalıyor çünkü telemetri, HMI ve
     // VcuLogic tüketici kodları bunları kullanıyor. İlgili CAN ID'lerin
     // reverse-engineering'i tamamlandıkça parse edilecek.
-    uint16_t TEL_bmsCellVoltageMaxDeciMv;  // DOĞRULANMADI — kaynak ID bilinmiyor
-    uint16_t TEL_bmsCellVoltageMinDeciMv;  // DOĞRULANMADI — kaynak ID bilinmiyor
-    int8_t TEL_bmsTempHighestC;            // DOĞRULANMADI — kaynak ID bilinmiyor
-    int8_t TEL_bmsTempLowestC;             // DOĞRULANMADI — kaynak ID bilinmiyor
-    uint8_t TEL_bmsSystemState;            // DOĞRULANMADI — kaynak ID bilinmiyor
+    uint16_t TEL_bmsCellVoltageMaxDeciMv;  // DOĞRULANMADI — kaynak ID yok (hiç parse edilmiyor)
+    uint16_t TEL_bmsCellVoltageMinDeciMv;  // DOĞRULANMADI — kaynak ID yok (hiç parse edilmiyor)
+    int8_t TEL_bmsTempHighestC;            // 0xE001 b[6:7] max — HIPOTEZ (Prompt 7 bekliyor)
+    int8_t TEL_bmsTempLowestC;             // 0xE001 b[6:7] min — HIPOTEZ (Prompt 7 bekliyor)
+    uint8_t TEL_bmsSystemState;            // DOĞRULANMADI — kaynak ID yok (sanitize→FAULT)
 
-    // Lithium Balance c-BMS — CAN ID 0xE000 (DOĞRULANDI)
+    // Lithium Balance c-BMS — CAN ID 0xE000
     uint16_t TEL_bmsPackVoltageDeciV;  // byte[2:3], raw * 0.1 = V — DOĞRULANDI
-    int32_t TEL_bmsCurrentCentiMa;     // byte[0:1], raw * 10 = CentiMa (0.01A) — DOĞRULANDI
-    uint16_t TEL_bmsSocHundredths;     // byte[4:5], raw = 0.01% — DOĞRULANDI
+    int32_t TEL_bmsCurrentCentiMa;     // byte[0:1] — HIPOTEZ (ölçek/işaret DOĞRULANMADI; birim adı belirsiz, Prompt 7)
+    uint16_t TEL_bmsSocHundredths;     // byte[4:5] — HIPOTEZ (SoC mi kapasite sayacı mı DOĞRULANMADI, Prompt 7)
 
     bool TEL_bmsDataValid;
     // Post-reception E000 freshness kaybı (krş. TEL_motorTimeoutActive).

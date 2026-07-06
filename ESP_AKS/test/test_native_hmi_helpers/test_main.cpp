@@ -41,7 +41,7 @@ extern void test_sendEndBytes_writes_three_ff(void);
 // "Veri yok" gösterimi (UNVERIFIED SOC/sıcaklık sentinelleri)
 extern void test_battery_unverified_source_returns_no_data(void);
 extern void test_temp_unverified_source_returns_no_data(void);
-extern void test_production_source_verified_flags_are_true(void);
+extern void test_production_source_verified_flags_are_false_pending_hw_verify(void);
 extern void test_battery_invalid_bms_returns_no_data(void);
 extern void test_temp_invalid_bms_returns_no_data(void);
 extern void test_battery_verified_valid_converts_hundredths_to_percent(void);
@@ -88,7 +88,7 @@ int main(int /*argc*/, char ** /*argv*/) {
 
     RUN_TEST(test_battery_unverified_source_returns_no_data);
     RUN_TEST(test_temp_unverified_source_returns_no_data);
-    RUN_TEST(test_production_source_verified_flags_are_true);
+    RUN_TEST(test_production_source_verified_flags_are_false_pending_hw_verify);
     RUN_TEST(test_battery_invalid_bms_returns_no_data);
     RUN_TEST(test_temp_invalid_bms_returns_no_data);
     RUN_TEST(test_battery_verified_valid_converts_hundredths_to_percent);

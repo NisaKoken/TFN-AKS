@@ -16,11 +16,13 @@
 #define CAN_ID_MOTOR_STATUS 0x200  // Motor Driver → AKS
 
 // Lithium Balance c-BMS — 29-bit Extended ID, Big Endian
-// Gerçek CAN sniffer loglarından doğrulanmış ID'ler.
-// 0xE000 ve 0xE001 tamamen çözülüp doğrulandı.
+// Gerçek CAN sniffer loglarından türetilmiş ID'ler.
+// 0xE000 byte[2:3] (PackV) DOĞRULANDI; aynı frame'in Current/SoC alanları ve
+// 0xE001 sıcaklık alanları PARSE ediliyor ama HIPOTEZ (Prompt 7 sniffer teyidi
+// bekliyor — bkz. Documents/CAN_Message_Table.md, HMI'de gated).
 // E002-E033 arası (bireysel hücre verileri) henüz DOĞRULANMADI.
-#define CAN_ID_LB_BMS_E000 0x0000E000  // ÇÖZÜLDÜ: PackV, Current, SoC
-#define CAN_ID_LB_BMS_E001 0x0000E001  // ÇÖZÜLDÜ: Temp 1 & Temp 2
+#define CAN_ID_LB_BMS_E000 0x0000E000  // PackV DOĞRULANDI; Current/SoC HIPOTEZ
+#define CAN_ID_LB_BMS_E001 0x0000E001  // Temp 1/2 HIPOTEZ (Prompt 7)
 #define CAN_ID_LB_BMS_E002 0x0000E002  // TODO: bireysel hücre voltajları (açık iş)
 #define CAN_ID_LB_BMS_E003 0x0000E003  // TODO: bireysel hücre voltajları (açık iş)
 #define CAN_ID_LB_BMS_E004 0x0000E004  // TODO: bireysel hücre voltajları (açık iş)

@@ -37,12 +37,12 @@ Kaynak: `include/SystemConfig.h`, "Phase 2 Safety Thresholds" bölümü (satır 
 | `BMS_CRITICAL_MIN_PACK_VOLTAGE_DECI_V` | 177 | 600 (60.0 V) | deciV | `VcuLogic::hasCriticalCondition` + `CanManager::handleLbBmsE000` → `CanParse::checkPackVoltageFault` | `TEL_bmsPackVoltageDeciV` | ✅ DOĞRULANDI | ✅ CANLI (iki bağımsız yol) |
 | `BMS_WARN_MAX_PACK_VOLTAGE_DECI_V` | 178 | 852 (85.2 V) | deciV | `VcuLogic::hasWarningCondition` | `TEL_bmsPackVoltageDeciV` | ✅ DOĞRULANDI | ✅ CANLI |
 | `BMS_CRITICAL_MAX_PACK_VOLTAGE_DECI_V` | 179 | 876 (87.6 V) | deciV | `VcuLogic::hasCriticalCondition` + `CanManager::handleLbBmsE000` → `CanParse::checkPackVoltageFault` | `TEL_bmsPackVoltageDeciV` | ✅ DOĞRULANDI | ✅ CANLI (iki bağımsız yol) |
-| `BMS_WARN_MAX_TEMP_C` | 185 | 55 | °C | *(yok)* | `TEL_bmsTempHighestC` | ❌ UNVERIFIED — kaynak ID bilinmiyor, hep 0 | ❌ ÖLÜ |
-| `BMS_CRITICAL_MAX_TEMP_C` | 186 | 70 | °C | *(yok)* | `TEL_bmsTempHighestC` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ |
-| `BMS_WARN_MAX_CHARGE_CURRENT_CENTI_MA` | 192 | 90 000 (0.9 A) | centi-mA | `VcuLogic::isCurrentWarning` (saf yardımcı, birim testli — ama çağrılmıyor) | `TEL_bmsCurrentCentiMa` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ (bağlanmamış) |
-| `BMS_CRITICAL_MAX_CHARGE_CURRENT_CENTI_MA` | 193 | 100 000 (1.0 A) | centi-mA | `VcuLogic::isCurrentCritical` (aynı durum) | `TEL_bmsCurrentCentiMa` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ (bağlanmamış) |
-| `BMS_WARN_MAX_DISCHARGE_CURRENT_CENTI_MA` | 194 | 900 000 (9.0 A) | centi-mA | `VcuLogic::isCurrentWarning` | `TEL_bmsCurrentCentiMa` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ (bağlanmamış) |
-| `BMS_CRITICAL_MAX_DISCHARGE_CURRENT_CENTI_MA` | 195 | 1 500 000 (15.0 A) | centi-mA | `VcuLogic::isCurrentCritical` | `TEL_bmsCurrentCentiMa` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ (bağlanmamış) |
+| `BMS_WARN_MAX_TEMP_C` | 185 | 55 | °C | *(yok — VCU'ya bağlı değil)* | `TEL_bmsTempHighestC` | ⚠️ HIPOTEZ — 0xE001 b[6:7]'den PARSE ediliyor (max), ama byte anlamı DOĞRULANMADI (Prompt 7) | ❌ ÖLÜ (karar yolunda; sinyal artık canlı ama eşik bağlanmadı) |
+| `BMS_CRITICAL_MAX_TEMP_C` | 186 | 70 | °C | *(yok — VCU'ya bağlı değil)* | `TEL_bmsTempHighestC` | ⚠️ HIPOTEZ — parse ediliyor, DOĞRULANMADI | ❌ ÖLÜ (karar yolunda) |
+| `BMS_WARN_MAX_CHARGE_CURRENT_CENTI_MA` | 192 | 90 000 (0.9 A) | centi-mA | `VcuLogic::isCurrentWarning` (saf yardımcı, birim testli — ama çağrılmıyor) | `TEL_bmsCurrentCentiMa` | ⚠️ HIPOTEZ — 0xE000 b[0:1]'den PARSE ediliyor (raw*10), ölçek/işaret DOĞRULANMADI + birim adı belirsiz (Prompt 7) | ❌ ÖLÜ (bağlanmamış; birim tutarsızlığı da var — bkz. not) |
+| `BMS_CRITICAL_MAX_CHARGE_CURRENT_CENTI_MA` | 193 | 100 000 (1.0 A) | centi-mA | `VcuLogic::isCurrentCritical` (aynı durum) | `TEL_bmsCurrentCentiMa` | ⚠️ HIPOTEZ — parse ediliyor, DOĞRULANMADI | ❌ ÖLÜ (bağlanmamış) |
+| `BMS_WARN_MAX_DISCHARGE_CURRENT_CENTI_MA` | 194 | 900 000 (9.0 A) | centi-mA | `VcuLogic::isCurrentWarning` | `TEL_bmsCurrentCentiMa` | ⚠️ HIPOTEZ — parse ediliyor, DOĞRULANMADI | ❌ ÖLÜ (bağlanmamış) |
+| `BMS_CRITICAL_MAX_DISCHARGE_CURRENT_CENTI_MA` | 195 | 1 500 000 (15.0 A) | centi-mA | `VcuLogic::isCurrentCritical` | `TEL_bmsCurrentCentiMa` | ⚠️ HIPOTEZ — parse ediliyor, DOĞRULANMADI | ❌ ÖLÜ (bağlanmamış) |
 | `BMS_CRITICAL_MIN_CELL_VOLTAGE_MV` | 200 | 2500 | mV | *(yok)* | `TEL_bmsCellVoltageMinDeciMv` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ |
 | `BMS_CRITICAL_MAX_CELL_VOLTAGE_MV` | 201 | 3650 | mV | *(yok)* | `TEL_bmsCellVoltageMaxDeciMv` | ❌ UNVERIFIED — hep 0 | ❌ ÖLÜ |
 
@@ -93,19 +93,32 @@ ama gerçek hücre verisi üzerinde değil.
 
 ## 4. Fiilen Ölü Eşikler ve Neden Önemli
 
-**Ölü** (kaynak sinyal hiç parse edilmediği/hep 0 olduğu için hiç tetiklenmeyen):
-sıcaklık eşikleri (`BMS_WARN_MAX_TEMP_C`, `BMS_CRITICAL_MAX_TEMP_C`), akım
-eşikleri (`BMS_WARN_/CRITICAL_MAX_CHARGE_/DISCHARGE_CURRENT_CENTI_MA`) ve
-hücre voltajı eşikleri (`BMS_CRITICAL_MIN_/MAX_CELL_VOLTAGE_MV`, SystemConfig.h
-tarafındakiler).
+**Karar yolunda ÖLÜ** (eşik VCU `hasWarning/hasCriticalCondition`'a
+BAĞLANMAMIŞ olduğu için gerçek olayda FAULT üretmeyen): sıcaklık eşikleri
+(`BMS_WARN_MAX_TEMP_C`, `BMS_CRITICAL_MAX_TEMP_C`), akım eşikleri
+(`BMS_WARN_/CRITICAL_MAX_CHARGE_/DISCHARGE_CURRENT_CENTI_MA`) ve hücre voltajı
+eşikleri (`BMS_CRITICAL_MIN_/MAX_CELL_VOLTAGE_MV`).
+
+> **Güncelleme (Prompt 6 — Yol A):** Sıcaklık (`TEL_bmsTempHighestC`, 0xE001
+> b[6:7] max), akım (`TEL_bmsCurrentCentiMa`, 0xE000 b[0:1]) ve SoC
+> (`TEL_bmsSocHundredths`, 0xE000 b[4:5]) kaynak sinyalleri artık **PARSE
+> ediliyor** (yani "hep 0" DEĞİL). ANCAK byte anlamı/ölçeği CAN_Message_Table.md'de
+> **HIPOTEZ** — Prompt 7 donanım sniffer teyidi bekliyor. Bu yüzden:
+> - **VCU kararına hâlâ BAĞLI DEĞİL** (yukarıdaki eşikler bağlanmadı) — ÖLÜ.
+> - **HMI ekranı** SoC/sıcaklık için `HMI_*_SOURCE_VERIFIED=false` ile sentinel
+>   ("--") gösterir (doğrulanmamış değeri sürücüye sayı gibi göstermez). Akımın
+>   HMI alanı hiç yok.
+> - **Telemetri CSV** (UKS izleme merkezi) bu HIPOTEZ değerleri sanitize'dan
+>   geçirerek yine de gönderir (alanlar CSV sözleşmesinde sabit). Açık iş:
+>   izleme merkezi tarafında da doğrulanana kadar "güvenilir" gösterilmemeli.
 
 Bu eşiklerin kodda tanımlı, derlenen ve (akım için) birim testli olması, ekip
 üyelerinde "bu korumalar aktif" izlenimi yaratabilir; oysa gerçek bir aşırı
 sıcaklık/akım/hücre-voltajı olayında VCU bunu FARK ETMEZ ve FAULT'a geçmez —
 bu, sahada **yanlış güvenlik hissi** riski taşır.
 
-**Canlı**: pack voltajı eşikleri (`TEL_bmsPackVoltageDeciV`, DOĞRULANDI) ve
-motor/BMS freshness timeout'ları.
+**Canlı (karar yolunda)**: pack voltajı eşikleri (`TEL_bmsPackVoltageDeciV`,
+DOĞRULANDI) ve motor/BMS freshness timeout'ları.
 
 ---
 

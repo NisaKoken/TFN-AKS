@@ -90,13 +90,90 @@ void test_e001_dlc_too_short(void) {
 }
 
 void test_e001_parsing_temps(void) {
-    // Temp 1 (Highest): 40 (0x28)
-    // Temp 2 (Lowest): -5 (0xFB)
+    // b6=40 (0x28), b7=-5 (0xFB): max=40 -> Highest, min=-5 -> Lowest
     twai_message_t m = makeE001Msg(8, 0x28, 0xFB);
     TelemetryData out{};
     TEST_ASSERT_TRUE(CanParse::parseLbBmsE001(m, out));
     TEST_ASSERT_EQUAL_INT8(40, out.TEL_bmsTempHighestC);
     TEST_ASSERT_EQUAL_INT8(-5, out.TEL_bmsTempLowestC);
+}
+
+// --- E001 max() semantiği (B3 §9.2.c.ii "en yüksek olan") ---
+// Byte sırasına körü körüne güvenilmez: b7 > b6 olduğunda Highest = b7 olmalı.
+
+void test_e001_max_picks_higher_when_b7_greater(void) {
+    // b6=10, b7=30 -> Highest=30 (b7), Lowest=10 (b6)
+    twai_message_t m = makeE001Msg(8, 0x0A, 0x1E);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE001(m, out));
+    TEST_ASSERT_EQUAL_INT8(30, out.TEL_bmsTempHighestC);
+    TEST_ASSERT_EQUAL_INT8(10, out.TEL_bmsTempLowestC);
+}
+
+void test_e001_max_both_negative(void) {
+    // b6=-20 (0xEC), b7=-5 (0xFB) -> Highest=-5, Lowest=-20
+    twai_message_t m = makeE001Msg(8, 0xEC, 0xFB);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE001(m, out));
+    TEST_ASSERT_EQUAL_INT8(-5, out.TEL_bmsTempHighestC);
+    TEST_ASSERT_EQUAL_INT8(-20, out.TEL_bmsTempLowestC);
+}
+
+void test_e001_dlc_boundary_8_ok(void) {
+    // Sınır: DLC=8 tam kabul edilir (min geçerli)
+    twai_message_t m = makeE001Msg(8, 0x00, 0x00);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE001(m, out));
+    TEST_ASSERT_EQUAL_INT8(0, out.TEL_bmsTempHighestC);
+    TEST_ASSERT_EQUAL_INT8(0, out.TEL_bmsTempLowestC);
+}
+
+// --- E000 akım (HIPOTEZ ölçek raw*10) — nominal/sınır/bozuk ---
+
+void test_e000_current_hypothesis_scale_positive(void) {
+    // b0:b1 = 0x00 0x64 (100) -> raw*10 = 1000 CentiMa (ölçek HIPOTEZ)
+    twai_message_t m = makeE000Msg(8, 0x00, 0x64, 0x02, 0x0E, 0x00, 0x00, 0x00, 0x00);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_INT32(1000, out.TEL_bmsCurrentCentiMa);
+}
+
+void test_e000_current_boundary_int16_min(void) {
+    // b0:b1 = 0x80 0x00 (INT16_MIN = -32768) -> -327680 CentiMa
+    twai_message_t m = makeE000Msg(8, 0x80, 0x00, 0x02, 0x0E, 0x00, 0x00, 0x00, 0x00);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_INT32(-327680, out.TEL_bmsCurrentCentiMa);
+}
+
+// --- E000 SoC (HIPOTEZ anlam) — nominal/sınır/bozuk ---
+
+void test_e000_soc_hypothesis_nominal(void) {
+    // b4:b5 = 0x13 0x88 (5000) -> %50.00 (ölçek HIPOTEZ)
+    twai_message_t m = makeE000Msg(8, 0x00, 0x00, 0x02, 0x0E, 0x13, 0x88, 0x00, 0x00);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_UINT16(5000, out.TEL_bmsSocHundredths);
+}
+
+void test_e000_soc_boundary_max_uint16(void) {
+    // b4:b5 = 0xFF 0xFF (65535) -> parse ham değeri döndürür (clamp sanitize'da)
+    twai_message_t m = makeE000Msg(8, 0x00, 0x00, 0x02, 0x0E, 0xFF, 0xFF, 0x00, 0x00);
+    TelemetryData out{};
+    TEST_ASSERT_TRUE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_UINT16(65535, out.TEL_bmsSocHundredths);
+}
+
+void test_e000_dlc6_rejects_current_and_soc_untouched(void) {
+    // Bozuk frame: DLC=6 (< 8) -> false, hiçbir alan yazılmamalı
+    twai_message_t m = makeE000Msg(6, 0x00, 0x64, 0x02, 0x0E, 0x13, 0x88, 0x00, 0x00);
+    TelemetryData out{};
+    out.TEL_bmsCurrentCentiMa = 42;
+    out.TEL_bmsSocHundredths = 7;
+    TEST_ASSERT_FALSE(CanParse::parseLbBmsE000(m, out));
+    TEST_ASSERT_EQUAL_INT32(42, out.TEL_bmsCurrentCentiMa);
+    TEST_ASSERT_EQUAL_UINT16(7, out.TEL_bmsSocHundredths);
+    TEST_ASSERT_FALSE(out.TEL_bmsDataValid);
 }
 
 int main(int argc, char** argv) {
@@ -107,5 +184,16 @@ int main(int argc, char** argv) {
     RUN_TEST(test_e000_preserves_other_fields);
     RUN_TEST(test_e001_dlc_too_short);
     RUN_TEST(test_e001_parsing_temps);
+    // Yeni: E001 max() semantiği
+    RUN_TEST(test_e001_max_picks_higher_when_b7_greater);
+    RUN_TEST(test_e001_max_both_negative);
+    RUN_TEST(test_e001_dlc_boundary_8_ok);
+    // Yeni: E000 akım (HIPOTEZ)
+    RUN_TEST(test_e000_current_hypothesis_scale_positive);
+    RUN_TEST(test_e000_current_boundary_int16_min);
+    // Yeni: E000 SoC (HIPOTEZ)
+    RUN_TEST(test_e000_soc_hypothesis_nominal);
+    RUN_TEST(test_e000_soc_boundary_max_uint16);
+    RUN_TEST(test_e000_dlc6_rejects_current_and_soc_untouched);
     return UNITY_END();
 }

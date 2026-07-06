@@ -40,12 +40,15 @@ bool parseMotorStatus(const twai_message_t& msg, MotorStatus& out);
 // =========================================================================
 
 // 0xE000 — alan bazında güven seviyeleri (bkz. Documents/CAN_Message_Table.md):
-//   byte[0:1] = Pack Current, big-endian int16 — DOĞRULANDI, çarpan 0.1A
+//   byte[0:1] = Pack Current adayı, big-endian int16 — HIPOTEZ (ölçek raw*10
+//               aday, DOĞRULANMADI — Prompt 7 sniffer teyidi bekliyor)
 //   byte[2:3] = Pack Voltage, big-endian uint16, raw * 0.1 = V — DOĞRULANDI
-//   byte[4:5] = SoC 1, big-endian uint16, raw * 0.01 = % — DOĞRULANDI
-//   byte[6:7] = SoC 2, big-endian uint16, raw * 0.01 = % — DOĞRULANDI (Henüz kullanılmıyor)
+//   byte[4:5] = SoC adayı, big-endian uint16, raw * 0.01 = % — HIPOTEZ (tablo
+//               bu byte'ları "kapasite sayacı adayı" işaretliyor, DOĞRULANMADI)
 // DLC ≥ 8 olmalı; aksi halde false döner.
-// Yazılan alanlar: TEL_bmsPackVoltageDeciV, TEL_bmsCurrentCentiMa, TEL_bmsSocHundredths, TEL_bmsDataValid (=true).
+// Yazılan alanlar: TEL_bmsPackVoltageDeciV (DOĞRULANDI), TEL_bmsCurrentCentiMa
+// + TEL_bmsSocHundredths (HIPOTEZ — telemetri logu için yazılır; ekranda
+// HMI_*_SOURCE_VERIFIED=false ile sentinel gösterilir), TEL_bmsDataValid (=true).
 bool parseLbBmsE000(const twai_message_t& msg, TelemetryData& out);
 
 // 0x1806E5F4 — Charger komut frame'i (BMS -> Charger; AKS yalnızca dinler).
@@ -55,9 +58,12 @@ bool parseLbBmsE000(const twai_message_t& msg, TelemetryData& out);
 // DLC < 4 ise false döner ve `out` değiştirilmez.
 bool parseCharger1806E5F4(const twai_message_t& msg, ChargerCommand& out);
 
-// 0xE001 — Sıcaklık Değerleri DOĞRULANDI
-//   byte[6] = Temperature 1 (int8_t, °C)
-//   byte[7] = Temperature 2 (int8_t, °C)
+// 0xE001 — Sıcaklık (HIPOTEZ — ölçek/anlam DOĞRULANMADI, Prompt 7 bekliyor).
+//   byte[6] = Sıcaklık sensörü 1 adayı (int8_t, °C aday)
+//   byte[7] = Sıcaklık sensörü 2 adayı (int8_t, °C aday)
+// TEL_bmsTempHighestC = max(b6,b7), TEL_bmsTempLowestC = min(b6,b7)
+// (B3 §9.2.c.ii "en yüksek olanının sıcaklığı"). DLC ≥ 8 olmalı; aksi halde
+// false. HMI_TEMP_SOURCE_VERIFIED=false olduğundan ekranda sentinel gösterilir.
 bool parseLbBmsE001(const twai_message_t& msg, TelemetryData& out);
 
 // 0xE002 — TODO: alan anlamı doğrulanmadı, ham byte'lar loglanıyor
